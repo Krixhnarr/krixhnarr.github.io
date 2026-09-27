@@ -44,11 +44,14 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   rotating weekly events.
 - **Storage**: progress in `localStorage`, capture photos in IndexedDB, with
   backup/restore on the ID screen.
-- **Look**: a game shell — a Home hub (featured card, big Scan button and
-  live tiles for rival, orders, crates, streak, event and collection), bottom
-  icon tab bar with a raised Scan button, level/XP chip and currency pills in
-  the header, chunky press-down buttons in Russo One, LED dot-matrix titles,
-  a drifting glow-and-grid background and idle motion throughout.
+- **Look — Field Expedition theme**: a bright outdoor palette that reads
+  well in sunlight — sky-blue scene with drifting clouds, sun and rolling
+  hills, white rounded panels, sunny-yellow press-down buttons, coral and
+  grass accents, bright type-tinted cards (Legendary = gold) and a
+  sky-and-grass battle arena. After 7pm it switches to a night sky with a
+  moon, stars and fireflies (Config → Sky: Auto / Day / Night). Game shell:
+  Home hub, bottom icon tab bar with a raised Scan button, level/XP chip and
+  currency pills, Russo One + JetBrains Mono, LED dot-matrix titles.
 
 Plain static files, no build step. When changing app files, bump `VERSION`
 in `sw.js` so installed copies pick up the update.

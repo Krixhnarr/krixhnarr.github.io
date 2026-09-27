@@ -1,7 +1,7 @@
 // Offline support. The app shell is refreshed in the background
 // (stale-while-revalidate); the ~15 MB model, TF.js bundle, 3D art and fonts are cached on
 // first use and served from cache afterwards. Scope is /wilddex/ only.
-const VERSION = 'wilddex-v13';
+const VERSION = 'wilddex-v14';
 const SHELL = [
   './',
   'index.html',

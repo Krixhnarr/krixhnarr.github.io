@@ -1,26 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <filter id="g" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#E6E6EB" stroke-opacity=".06" stroke-width="2"/></pattern>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62C4FF"/><stop offset="1" stop-color="#2F9BEA"/></linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="2"/></pattern>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#242427"/>
+  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
+  <path d="M0 420C90 380 170 392 256 414S420 452 512 404V400 512H0Z" fill="#4CC764" clip-path="inset(0 round 112px)"/>
   <rect width="512" height="512" rx="112" fill="url(#grid)"/>
-  <g fill="none" stroke="#9B7CD8" stroke-width="14" stroke-linecap="square" filter="url(#g)">
+  <g fill="none" stroke="#FFC83D" stroke-width="14" stroke-linecap="square" filter="url(#g)">
     <path d="M72 140V72h68M372 72h68v68M440 372v68h-68M140 440H72v-68"/>
   </g>
   <g transform="translate(256 266) scale(.8)" filter="url(#g)">
-    <path d="M-8-18 C-60-150 -190-170 -205-110 C-215-60 -150-20 -8-4Z" fill="#9B7CD8"/>
-    <path d="M8-18 C60-150 190-170 205-110 C215-60 150-20 8-4Z" fill="#9B7CD8"/>
-    <path d="M-120-148 C-170-160 -208-140 -205-110 C-200-80 -172-66 -150-60 C-160-95 -150-128 -120-148Z" fill="#CDBDF0"/>
-    <path d="M120-148 C170-160 208-140 205-110 C200-80 172-66 150-60 C160-95 150-128 120-148Z" fill="#CDBDF0"/>
-    <path d="M-8 2 C-150 0 -190 60 -170 120 C-150 175 -60 175 -8 70Z" fill="#2E2E32" stroke="#E6E6EB" stroke-width="7"/>
-    <path d="M8 2 C150 0 190 60 170 120 C150 175 60 175 8 70Z" fill="#2E2E32" stroke="#E6E6EB" stroke-width="7"/>
-    <g fill="none" stroke="#E6E6EB" stroke-width="8">
+    <path d="M-8-18 C-60-150 -190-170 -205-110 C-215-60 -150-20 -8-4Z" fill="#FF7A59"/>
+    <path d="M8-18 C60-150 190-170 205-110 C215-60 150-20 8-4Z" fill="#FF7A59"/>
+    <path d="M-120-148 C-170-160 -208-140 -205-110 C-200-80 -172-66 -150-60 C-160-95 -150-128 -120-148Z" fill="#FFC83D"/>
+    <path d="M120-148 C170-160 208-140 205-110 C200-80 172-66 150-60 C160-95 150-128 120-148Z" fill="#FFC83D"/>
+    <path d="M-8 2 C-150 0 -190 60 -170 120 C-150 175 -60 175 -8 70Z" fill="#1E3346" stroke="#FFFFFF" stroke-width="7"/>
+    <path d="M8 2 C150 0 190 60 170 120 C150 175 60 175 8 70Z" fill="#1E3346" stroke="#FFFFFF" stroke-width="7"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="8">
       <ellipse cx="-98" cy="82" rx="46" ry="40"/><ellipse cx="-98" cy="82" rx="24" ry="20"/>
       <ellipse cx="98" cy="82" rx="46" ry="40"/><ellipse cx="98" cy="82" rx="24" ry="20"/>
     </g>
-    <circle cx="-98" cy="82" r="8" fill="#9B7CD8"/><circle cx="98" cy="82" r="8" fill="#9B7CD8"/>
-    <rect x="-9" y="-40" width="18" height="150" rx="9" fill="#E6E6EB"/>
-    <path d="M-4-38 C-18-80 -34-104 -50-116 M4-38 C18-80 34-104 50-116" stroke="#E6E6EB" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <circle cx="-98" cy="82" r="8" fill="#FFC83D"/><circle cx="98" cy="82" r="8" fill="#FFC83D"/>
+    <rect x="-9" y="-40" width="18" height="150" rx="9" fill="#FFFFFF"/>
+    <path d="M-4-38 C-18-80 -34-104 -50-116 M4-38 C18-80 34-104 50-116" stroke="#FFFFFF" stroke-width="7" fill="none" stroke-linecap="round"/>
   </g>
 </svg>

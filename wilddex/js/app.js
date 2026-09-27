@@ -1041,8 +1041,8 @@ function renderInvDetail(e) {
   const known = rec || intel;
   const lv = rec ? game.levelFor(rec.count) : 1;
   const st = game.statsFor(e, lv);
-  const types = AFFINITY[e.k].map((t) => `<b style="color:${TYPES[t].color}">${TYPES[t].name}</b>`).join(' / ');
-  const rarCol = { 1: 'var(--steel)', 2: 'var(--accent-soft)', 3: 'var(--accent-hi)', 4: 'var(--gold)' }[e.r];
+  const types = AFFINITY[e.k].map((t) => `<b class="tcx" style="--tc:${TYPES[t].color}">${TYPES[t].name}</b>`).join(' / ');
+  const rarCol = { 1: '#7D8C99', 2: '#2E9B45', 3: 'var(--accent-deep)', 4: '#B07F00' }[e.r];
   $('#inv-detail').innerHTML = `
     <p class="inv-name">${known ? `${esc(e.n)} <small>${esc(e.s)}</small>` : `? ? ? <small>#${pad(e.no)} · undiscovered</small>`}</p>
     <div class="inv-art${rec ? '' : ' locked'}${intel ? ' intel' : ''}">
@@ -1318,7 +1318,7 @@ function startBattle(kind) {
       drawHP(e.side);
       popGain(`-${e.dmg}`, tgt, { cls: e.mult > 1 ? 'dmg super' : e.mult < 1 ? 'dmg weak' : 'dmg' });
       const note = [e.crit ? 'Critical!' : '', e.mult > 1 ? 'Super effective!' : e.mult < 1 ? 'Resisted…' : ''].filter(Boolean).join(' ');
-      logLine(`<b>${esc(e.name)}</b> used <span style="color:${TYPES[e.type].color}">${MOVE_NAME(e.move === 'overdrive' ? 'overdrive' : e.move)}</span> · ${e.dmg} dmg${note ? ` · <em>${note}</em>` : ''}`);
+      logLine(`<b>${esc(e.name)}</b> used <span class="tcx" style="--tc:${TYPES[e.type].color}">${MOVE_NAME(e.move === 'overdrive' ? 'overdrive' : e.move)}</span> · ${e.dmg} dmg${note ? ` · <em>${note}</em>` : ''}`);
       if (e.mult > 1 || e.crit || e.move === 'overdrive') banner(e.move === 'overdrive' ? 'OVERDRIVE' : e.crit ? 'CRITICAL' : 'SUPER');
       $('.fighter', sideEl(e.target)).classList.remove('guarding');
       await sleep(750 * fx);
@@ -1509,6 +1509,8 @@ function renderProfile() {
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Config</h3></div>
+      <div class="toggle"><span>Sky<small>Night sky from 7pm to 6am</small></span>
+        <span class="seg-pick" role="group" aria-label="Sky">${['auto', 'day', 'night'].map((m) => `<button type="button" data-theme-mode="${m}" aria-pressed="${(s.settings.theme || 'auto') === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</span></div>
       <label class="toggle"><span>Voice<small>Read new cards aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
       <label class="toggle"><span>Sound FX</span>
@@ -1584,6 +1586,8 @@ $('#profile').addEventListener('submit', (ev) => {
 });
 $('#profile').addEventListener('click', async (ev) => {
   const s = state();
+  const tm = ev.target.closest('[data-theme-mode]');
+  if (tm) { s.settings.theme = tm.dataset.themeMode; store.save(); applyTime(); sfx.click(); renderProfile(); return; }
   const tb = ev.target.closest('[data-title]');
   if (tb) { loot.locker(s).title = tb.dataset.title; store.save(); sfx.click(); buzz(10); refreshAll(); renderProfile(); return; }
   const fb = ev.target.closest('[data-frame]');
@@ -1929,14 +1933,14 @@ function renderHome() {
     </section>
     <button type="button" class="scan-cta" data-tab="scan" data-autostart>${ICON.scan}<span>Scan an animal</span></button>
     <div class="tiles">
-      ${tile(r ? { tab: 'arena', icon: ICON.rival, label: 'Rival', value: esc(r.name), sub: r.won ? 'Defeated ✓' : `Win +${battle.RIVAL_REWARD.credits}◆`, hot: !r.won, tc: '#F09A8C' }
-        : { tab: 'arena', icon: ICON.rival, label: 'Arena', value: 'Locked', sub: 'Catch a card first', tc: '#F09A8C' })}
-      ${tile({ tab: 'ops', icon: ICON.orders, label: 'Orders', value: `${done}/${d.missions.length}`, sub: ready ? `${ready} reward${ready > 1 ? 's' : ''} ready!` : 'Daily missions', hot: ready > 0, tc: 'var(--accent-hi)' })}
-      ${tile(crates ? { act: 'crate', icon: ICON.crate, label: 'Crates', value: crates, sub: 'Tap to open!', hot: true, tc: 'var(--gold)' }
-        : { tab: 'id', goto: 'supply', icon: ICON.crate, label: 'Crates', value: 0, sub: `${loot.CRATE_COST}◆ each`, tc: 'var(--gold)' })}
+      ${tile(r ? { tab: 'arena', icon: ICON.rival, label: 'Rival', value: esc(r.name), sub: r.won ? 'Defeated ✓' : `Win +${battle.RIVAL_REWARD.credits}◆`, hot: !r.won, tc: '#FF7A59' }
+        : { tab: 'arena', icon: ICON.rival, label: 'Arena', value: 'Locked', sub: 'Catch a card first', tc: '#FF7A59' })}
+      ${tile({ tab: 'ops', icon: ICON.orders, label: 'Orders', value: `${done}/${d.missions.length}`, sub: ready ? `${ready} reward${ready > 1 ? 's' : ''} ready!` : 'Daily missions', hot: ready > 0, tc: '#2F9BEA' })}
+      ${tile(crates ? { act: 'crate', icon: ICON.crate, label: 'Crates', value: crates, sub: 'Tap to open!', hot: true, tc: '#F2B51D' }
+        : { tab: 'id', goto: 'supply', icon: ICON.crate, label: 'Crates', value: 0, sub: `${loot.CRATE_COST}◆ each`, tc: '#F2B51D' })}
       ${tile({ tab: 'ops', icon: ICON.streak, label: 'Streak', value: `${streak}<small>d</small>`, sub: `best ${s.streak?.best || 0}`, hot: streak > 0 && s.streak.last !== game.today(), tc: '#F0A05B' })}
-      ${tile({ tab: 'ops', icon: ICON.event, label: esc(ev.name), value: `${evP}/${ev.goal}`, bar: evP / ev.goal, sub: ev.claimed ? 'Complete ✓' : `${ev.daysLeft}d left`, hot: evP >= ev.goal && !ev.claimed, tc: ev.type ? TYPES[ev.type].color : 'var(--accent-hi)' })}
-      ${tile({ tab: 'binder', icon: ICON.cards, label: 'Collection', value: `${n}<small>/${ENTRIES.length}</small>`, bar: n / ENTRIES.length, sub: `${holos} holo · ${sectors} sectors`, tc: '#9ED8CF' })}
+      ${tile({ tab: 'ops', icon: ICON.event, label: esc(ev.name), value: `${evP}/${ev.goal}`, bar: evP / ev.goal, sub: ev.claimed ? 'Complete ✓' : `${ev.daysLeft}d left`, hot: evP >= ev.goal && !ev.claimed, tc: ev.type ? TYPES[ev.type].color : '#2F9BEA' })}
+      ${tile({ tab: 'binder', icon: ICON.cards, label: 'Collection', value: `${n}<small>/${ENTRIES.length}</small>`, bar: n / ENTRIES.length, sub: `${holos} holo · ${sectors} sectors`, tc: '#2BB5A0' })}
     </div>`;
 }
 $('#home').addEventListener('click', (ev) => {
@@ -2098,7 +2102,18 @@ function handleCompareLink() {
   else toast('THAT LINK ISN\'T A VALID WILDDEX CODE');
 }
 
+// Day or night sky: automatic by local time (night 7pm–6am), or fixed in Config.
+function applyTime() {
+  const mode = state().settings.theme || 'auto';
+  const h = new Date().getHours();
+  const night = mode === 'night' || (mode === 'auto' && (h >= 19 || h < 6));
+  document.documentElement.dataset.time = night ? 'night' : 'day';
+  $('meta[name="theme-color"]').setAttribute('content', night ? '#0B1633' : '#62C4FF');
+}
+
 async function boot() {
+  applyTime();
+  setInterval(applyTime, 5 * 60 * 1000);
   drawWaves();
   $$('.screen-title').forEach(renderDots);
   startTwinkle();
