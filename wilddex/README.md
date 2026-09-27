@@ -25,6 +25,19 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   colour-coded affinity types with HUD glyphs, rarity frames (Legendary = gold),
   gyroscope card tilt (`js/affinity.js`), game stats, levels,
   missions and streaks (`js/game.js`).
+- **Capture feel**: the liveness sweep doubles as a lock-on mini-game — a
+  ring fills as sync builds, and the result earns a sync grade (S/A/B/C) from
+  confidence, depth and motion, with bonus credits and XP. Any capture has a
+  1-in-40 chance (1-in-20 on an S) of a rainbow **holo** variant. Re-scans
+  power cards up with half-star steps to five stars at Lv 10.
+- **Battles** (`js/battle.js`): 3-v-3 turn-based fights with the cards you own —
+  type strikes, Guard and a charged Overdrive, a 13-type matchup wheel
+  (each type beats two), a daily rival and paid practice battles. Battles
+  never give or take cards.
+- **Rewards**: operator XP from scans, grades, battles and orders; full-screen
+  level-ups pay credits and a supply crate. Crates (`js/loot.js`) hold only
+  cosmetics — card frames and operator titles for the Locker. Haptics,
+  count-up credits and floating reward numbers throughout.
 - **Social & world**: compare collections with friends via a QR code / link
   (`#c=` bitset of owned cards — no server, never grants cards); opt-in
   location tags (rounded to ~1 km, on-device) with a self-drawn field map;

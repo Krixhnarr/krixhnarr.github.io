@@ -7,6 +7,8 @@ import * as game from './game.js';
 import { detectFrame } from './liveness.js';
 import { recordSweep, analyseSweep } from './parallax.js';
 import { renderDots, startTwinkle, dotSVG } from './dotmatrix.js';
+import * as battle from './battle.js';
+import * as loot from './loot.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -61,7 +63,24 @@ const sfx = {
   coin: () => { tone(988, 0, 0.06, 'square', 0.03); tone(1319, 0.06, 0.18, 'square', 0.03); },
   fail: () => { tone(220, 0, 0.14, 'sawtooth', 0.03); tone(165, 0.13, 0.26, 'sawtooth', 0.03); },
   click: () => tone(1800, 0, 0.02, 'square', 0.015),
+  lock: () => { tone(1568, 0, 0.05, 'square', 0.03); tone(2093, 0.06, 0.12, 'square', 0.03); },
+  grade: (g) => { const n = { S: 4, A: 3, B: 2, C: 1 }[g]; for (let i = 0; i < n; i++) tone(660 * 1.26 ** i, i * 0.07, 0.12, 'square', 0.03); tone(180, 0, 0.18, 'sine', 0.08); },
+  holo: () => [1319, 1568, 1976, 2349, 2637, 3136].forEach((f, i) => tone(f, i * 0.05, 0.3, 'triangle', 0.03)),
+  hit: (m = 1) => { tone(m > 1 ? 140 : 110, 0, 0.12, 'sawtooth', 0.05); tone(m > 1 ? 420 : 300, 0.02, 0.06, 'square', 0.03); },
+  guard: () => { tone(520, 0, 0.08, 'triangle', 0.04); tone(780, 0.06, 0.1, 'triangle', 0.03); },
+  overdrive: () => { for (let i = 0; i < 12; i++) tone(200 + i * 110, i * 0.03, 0.05, 'sawtooth', 0.025); },
+  faint: () => { for (let i = 0; i < 5; i++) tone(500 - i * 70, i * 0.07, 0.09, 'square', 0.03); },
+  win: () => [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.11, 0.22, 'square', 0.035)),
+  lose: () => [392, 349.23, 311.13, 261.63].forEach((f, i) => tone(f, i * 0.16, 0.3, 'triangle', 0.04)),
+  levelup: () => { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, i * 0.09, 0.25, 'square', 0.035)); [1046.5, 1318.5, 1568].forEach((f) => tone(f, 0.55, 0.9, 'triangle', 0.04)); },
+  crack: (n = 1) => { tone(90 + n * 30, 0, 0.1, 'sawtooth', 0.06); tone(900 + n * 200, 0.02, 0.05, 'square', 0.025); },
 };
+
+// Phone vibration, when the phone supports it and the player hasn't turned it off.
+function buzz(pattern) {
+  if (state().settings.haptics === false || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch { /* ignore */ }
+}
 
 function speak(text) {
   if (!state().settings.voice || !('speechSynthesis' in window)) return;
@@ -133,9 +152,99 @@ function toast(msg) {
 
 function flash(rarity = 0) {
   const f = document.createElement('div');
-  f.className = `flash${rarity === 4 ? ' gold' : ''}`;
+  f.className = `flash${rarity === 4 ? ' gold' : rarity === 5 ? ' holo' : ''}`;
   document.body.appendChild(f);
   setTimeout(() => f.remove(), 450);
+}
+
+// Floating reward numbers ("+25◆") that rise from where they were earned.
+function popGain(text, from, { cls = '', delay = 0 } = {}) {
+  if (reducedMotion()) return;
+  setTimeout(() => {
+    const r = (from && from.getBoundingClientRect && from.getBoundingClientRect()) || { left: innerWidth / 2 - 20, top: innerHeight / 2, width: 40, height: 0 };
+    const el = document.createElement('div');
+    el.className = `pop ${cls}`;
+    el.textContent = text;
+    el.style.left = `${r.left + r.width / 2}px`;
+    el.style.top = `${r.top + r.height / 2}px`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
+  }, delay);
+}
+
+// Counts a number up (or down) instead of snapping to it.
+function countTo(el, to) {
+  const from = Number(el.dataset.v ?? el.textContent) || 0;
+  el.dataset.v = to;
+  if (from === to || reducedMotion()) { el.textContent = to; return; }
+  const start = performance.now();
+  const dur = Math.min(900, 250 + Math.abs(to - from) * 12);
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / dur);
+    el.textContent = Math.round(from + (to - from) * (1 - (1 - p) ** 3));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ---- operator XP & level-ups
+const levelUps = [];
+// Grants XP; each level crossed pays credits + a free supply crate, shown once the current sheet closes.
+function earnXP(amount) {
+  if (!amount) return null;
+  const s = state();
+  const r = game.grantXP(s, amount);
+  for (let L = r.before + 1; L <= r.after; L++) {
+    const credits = game.levelUpCredits(L);
+    s.shards = (s.shards || 0) + credits;
+    loot.locker(s).crates++;
+    levelUps.push({ level: L, credits });
+  }
+  return r;
+}
+function flushLevelUps() {
+  if (!levelUps.length || !$('#sheet').hidden || !$('#levelup').hidden) return;
+  const ups = levelUps.splice(0);
+  const last = ups[ups.length - 1];
+  const credits = ups.reduce((a, u) => a + u.credits, 0);
+  const box = $('#levelup');
+  box.innerHTML = `<div class="lu-rays" aria-hidden="true"></div>
+    <div class="lu-body">
+      <span class="dot-text lu-title"><span class="sr">Level up</span>${dotSVG('LEVEL UP')}</span>
+      <div class="lu-level"><small>operator level</small><b>${last.level}</b></div>
+      <div class="lu-rewards">
+        <span class="gain hl">+${credits}◆ credits</span>
+        <span class="gain hl">+${ups.length} supply crate${ups.length > 1 ? 's' : ''}</span>
+      </div>
+      <p class="lu-note">Open crates in <b>ID → Supply</b> for new card frames and titles.</p>
+      <button type="button" class="btn primary" data-lu-close>Continue</button>
+    </div>`;
+  box.hidden = false;
+  sfx.levelup();
+  buzz([60, 50, 60, 50, 220]);
+  const stage = $('.lu-body', box);
+  burst(stage, 3);
+  setTimeout(() => burst(stage, 4), 280);
+  $('[data-lu-close]', box).focus({ preventScroll: true });
+  refreshAll(true);
+}
+$('#levelup').addEventListener('click', (ev) => {
+  if (!ev.target.closest('[data-lu-close]')) return;
+  $('#levelup').hidden = true;
+  $('#levelup').innerHTML = '';
+  refreshAll();
+});
+
+// XP bar for result screens: fills from the old total to the new one.
+function xpBarHTML(before, after) {
+  const lv = game.levelForXP(after);
+  const lo = game.xpForLevel(lv);
+  const hi = game.xpForLevel(lv + 1);
+  const fromPct = game.levelForXP(before) < lv ? 0 : ((before - lo) / (hi - lo)) * 100;
+  const toPct = ((after - lo) / (hi - lo)) * 100;
+  return `<div class="xpbar" style="--from:${fromPct.toFixed(1)}%;--to:${toPct.toFixed(1)}%">
+    <div class="xp-top"><span>Operator LV ${lv}</span><b>+${after - before} XP</b><span>${after - lo}/${hi - lo}</span></div>
+    <div class="xp-track"><span></span></div></div>`;
 }
 
 let lastFocus = null;
@@ -168,9 +277,14 @@ function closeSheet() {
   onSheetClose = null;
   if (cb) cb();
   if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+  setTimeout(flushLevelUps, 150);
 }
 $('#sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeSheet(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#levelup').hidden) $('[data-lu-close]')?.click();
+  else if (!battleLocked) closeSheet();
+});
 
 function hydratePhotos(root) {
   $$('img[data-photo]', root).forEach(async (img) => {
@@ -230,13 +344,14 @@ function burst(stage, rarity) {
     2: ['#CDBDF0', '#F1F1F4', '#9B7CD8'],
     3: ['#B9A0F0', '#F1F1F4', '#5FB6DA', '#D98DDB'],
     4: ['#F2D27A', '#FFF1C2', '#E8B84A', '#CDBDF0'],
+    5: ['#FF8AD8', '#FFE08A', '#8AFFD0', '#8AD8FF', '#C48AFF', '#FFFFFF'],
   }[rarity] || ['#9B7CD8', '#CDBDF0', '#F1F1F4'];
   const b = document.createElement('div');
   b.className = 'burst';
-  const n = 10 + rarity * rarity * 5;
+  const n = 10 + Math.min(4, rarity) * Math.min(4, rarity) * 5;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
-    const d = 90 + Math.random() * (60 + rarity * 30);
+    const d = 90 + Math.random() * (60 + Math.min(4, rarity) * 30);
     const p = document.createElement('i');
     p.style.setProperty('--x', `${Math.cos(a) * d}px`);
     p.style.setProperty('--y', `${Math.sin(a) * d}px`);
@@ -259,12 +374,14 @@ function cardHTML(e, { tag = 'button' } = {}) {
   const intel = !rec && s.intel[e.k];
   const known = rec || intel;
   const types = AFFINITY[e.k];
-  const cls = `card r${e.r}${rec ? '' : ' locked'}${intel ? ' intel' : ''}`;
+  const cls = `card r${e.r}${rec ? '' : ' locked'}${intel ? ' intel' : ''}${rec?.holo ? ' holo' : ''} skin-${loot.frameId(s)}`;
+  const lv = rec ? game.levelFor(rec.count) : 0;
   const attrs = tag === 'button' ? `type="button" data-key="${e.k}" aria-label="#${pad(e.no)} ${known ? esc(e.n) : 'unknown card'}${rec ? '' : ', not captured'}"` : '';
   return `<${tag} class="${cls}"${known ? ` style="--tc:${typeColor(e)}"` : ''} ${attrs}>
     <div class="card-top"><span>#${pad(e.no)}</span><span class="tdot"></span></div>
-    ${rec ? `<span class="card-lv">LV${game.levelFor(rec.count)}</span>` : ''}
-    <div class="card-art"><div class="disc"></div><img src="${artURL(e)}" alt="" loading="lazy" draggable="false"></div>
+    ${rec ? `<span class="card-lv">LV${lv}</span>` : ''}${rec?.holo ? '<span class="holo-tag">HOLO</span>' : ''}
+    <div class="card-art"><div class="disc"></div><img src="${artURL(e)}" alt="" loading="lazy" draggable="false">
+      ${rec ? `<span class="card-stars" role="img" aria-label="Level ${lv} of ${game.MAX_LEVEL}">${game.starsHTML(lv)}</span>` : ''}</div>
     ${!known ? '<span class="lock">ENCRYPTED</span>' : ''}${intel ? '<span class="lock">NOT CAPTURED</span>' : ''}
     <div class="card-name">${known ? esc(e.n) : '? ? ?'}</div>
     <div class="card-facts">
@@ -293,7 +410,7 @@ function statsPanel(e, rec) {
   const next = rec ? game.nextLevelAt(lv) : null;
   const prevAt = 2 ** (lv - 1);
   return `<section class="panel" style="--tc:${typeColor(e)}">
-    <div class="panel-head"><span>Battle stats · Lv ${rec ? lv : '—'}</span><svg class="shape" viewBox="0 0 20 12"><path d="M1 12V4M5 12V1M9 12V6M13 12V2M17 12V7"/></svg></div>
+    <div class="panel-head"><span>Battle stats · Lv ${rec ? lv : '—'}${rec ? ` <em class="stars-inline">${game.starsHTML(lv)}</em>` : ''}</span><svg class="shape" viewBox="0 0 20 12"><path d="M1 12V4M5 12V1M9 12V6M13 12V2M17 12V7"/></svg></div>
     <div class="panel-body">
       <div class="stats">${game.STAT_KEYS.map((k) => `<div class="stat"><span>${k.toUpperCase()}</span><span class="bar"><span style="width:${st[k]}%"></span></span><b>${rec ? st[k] : '??'}</b></div>`).join('')}</div>
       <div class="pwr"><span>POWER</span><b>${rec ? st.pwr : '???'}</b></div>
@@ -303,7 +420,7 @@ function statsPanel(e, rec) {
   </section>`;
 }
 
-function detailHTML(e, { banner = '', gains = '', hideUntilFlip = false, typing = false } = {}) {
+function detailHTML(e, { banner = '', gains = '', extra = '', hideUntilFlip = false, typing = false } = {}) {
   const s = state();
   const rec = s.caught[e.k];
   const intel = !rec && s.intel[e.k];
@@ -318,7 +435,7 @@ function detailHTML(e, { banner = '', gains = '', hideUntilFlip = false, typing 
       <span class="sci">${known ? esc(e.s) : 'species incognita'}</span>
       ${typeChips(e)}
     </div>
-    ${gains ? `<div class="gains">${gains}</div>` : ''}
+    ${gains ? `<div class="gains">${gains}</div>` : ''}${extra}
     ${rec ? `
       <section class="panel"><div class="panel-head"><span>Dex entry</span><span>${RARITY[e.r].name}</span></div>
         <div class="panel-body"><p class="dex-text${typing ? '' : ' done'}"><span class="sr">${esc(e.t)}</span><span class="typed" aria-hidden="true">${typing ? '' : esc(e.t)}</span></p>
@@ -488,6 +605,7 @@ function warmModel() {
 }
 
 // ---------------------------------------------------------------- scanning
+let pendingGrade = null; // sync grade of the last verified sweep, used by register()
 async function runScan(source) {
   if (busy) return;
   busy = true;
@@ -496,21 +614,35 @@ async function runScan(source) {
     if (!stream) { await startCamera(); if (!stream) return; }
     warmModel().catch(() => {});
     log(`&gt; wilddex.scan --source=${source} --live`, 'cmd');
-    log('[..] depth sweep · slide phone left, then right');
+    log('[..] lock-on sweep · slide phone left, then right');
+    pendingGrade = null;
 
-    // 1) Depth sweep: record ~1.3 s while the player slides the phone.
+    // 1) Lock-on sweep: record ~1.9 s while the player slides the phone. The
+    //    ring drifts the way the phone should move and fills as sync builds.
+    vf.classList.remove('locked');
     vf.classList.add('sweeping');
     $('#sweep-bar').style.width = '0%';
+    $('#lock-arc').style.strokeDashoffset = 100;
     let tick = 0;
+    let quarter = 0;
     const frames = await recordSweep(video, {
       onProgress: (p) => {
         $('#sweep-bar').style.width = `${p * 100}%`;
         $('#sweep-text').textContent = p < 0.5 ? 'Slide phone left' : 'Now slide right';
+        $('#lock-arc').style.strokeDashoffset = 100 - p * 100;
+        $('#lock-pct').textContent = `${Math.round(p * 100)}%`;
+        const lx = p < 0.5 ? -p * 2 : -1 + (p - 0.5) * 4;
+        $('#lockon').style.setProperty('--lx', `${(lx * 12).toFixed(1)}%`);
         if (tick++ % 3 === 0) tone(p < 0.5 ? 900 + p * 400 : 1300 - (p - 0.5) * 400, 0, 0.03, 'square', 0.015);
+        if (Math.floor(p * 4) > quarter) { quarter = Math.floor(p * 4); buzz(12); }
       },
     });
     vf.classList.remove('sweeping');
     if (!stream) return;
+    vf.classList.add('locked');
+    sfx.lock();
+    buzz([20, 40, 20]);
+    setTimeout(() => vf.classList.remove('locked'), 900);
 
     // 2) Freeze the last frame and identify the animal.
     captureFrame();
@@ -531,6 +663,7 @@ async function runScan(source) {
       const frame = detectFrame(raw, raw.width, raw.height);
       if (spoof.blocked || frame.found) v = { kind: 'spoof', spoof, frame };
       else if (depth.verdict !== 'live') v = { kind: 'depth', depth };
+      else pendingGrade = game.syncGrade(v.top.score, depth);
     }
     const wait = 1200 - (performance.now() - started);
     if (wait > 0) await sleep(wait);
@@ -635,6 +768,8 @@ function showChoices(options, text) {
 async function register(e, form, alternatives = []) {
   const s = state();
   const snapshot = structuredClone(s);
+  const grade = pendingGrade;
+  pendingGrade = null;
   const now = Date.now();
   const isNew = !s.caught[e.k];
   const rec = s.caught[e.k] || { first: now, count: 0, forms: [], photo: false };
@@ -667,7 +802,20 @@ async function register(e, form, alternatives = []) {
   if (eventDone) gains.push([`event complete: ${game.weeklyEvent(s).name}`, true]);
   const setDone = isNew && SETS.find((x) => x.id === e.set).entries.every((x) => s.caught[x.k]);
   if (setDone) { shards += 50; gains.push([`sector complete +50◆`, true]); }
+  if (grade) {
+    shards += grade.credits;
+    if (grade.credits) gains.push([`sync ${grade.grade} +${grade.credits}◆`, grade.grade === 'S']);
+    if (!s.bestGrade || 'SABC'.indexOf(grade.grade) < 'SABC'.indexOf(s.bestGrade)) s.bestGrade = grade.grade;
+  }
+  // Holo roll: a rare foil variant of this card.
+  let holoNew = false;
+  if (Math.random() < game.holoChance(grade?.grade)) {
+    if (!rec.holo) { rec.holo = now; holoNew = true; gains.unshift(['✦ holo variant', true]); } else { shards += game.HOLO_DUPE_CREDITS; gains.push([`holo echo +${game.HOLO_DUPE_CREDITS}◆`, true]); }
+  }
   s.shards = (s.shards || 0) + shards;
+  const xpBefore = s.xp;
+  const xpGain = (isNew ? RARITY[e.r].value : game.SIGHTING_XP) + (grade ? grade.xp : 0) + (holoNew ? 25 : 0);
+  earnXP(xpGain);
   store.save();
   refreshAll(true);
   tagLocation(e.k);
@@ -675,23 +823,37 @@ async function register(e, form, alternatives = []) {
   log(isNew
     ? `[ok] new card #${pad(e.no)} ${esc(e.n)} · +${shards}◆`
     : `[ok] sighting #${pad(e.no)} ×${rec.count} · +${shards}◆`, 'ok');
-  if (navigator.vibrate) navigator.vibrate(!isNew ? 30 : e.r === 4 ? [40, 60, 40, 60, 200] : e.r === 3 ? [30, 40, 30, 40, 120] : [30, 40, 80]);
+  buzz(!isNew ? 30 : e.r === 4 ? [40, 60, 40, 60, 200] : e.r === 3 ? [30, 40, 30, 40, 120] : [30, 40, 80]);
 
-  const gainsHTML = gains.map(([t, hl], i) => `<span class="gain${hl ? ' hl' : ''}" style="animation-delay:${i * 0.08}s">${esc(t)}</span>`).join('');
+  const gainsHTML = gains.map(([t, hl], i) => `<span class="gain${hl ? ' hl' : ''}${t.startsWith('✦') ? ' holo' : ''}" style="animation-delay:${i * 0.08}s">${esc(t)}</span>`).join('');
   const PULL = { 1: '▲ New card', 2: '▲ Uncommon pull', 3: '◆ Rare pull', 4: '★ Legendary pull' };
-  const banner = isNew ? `<span class="banner r${e.r}">${PULL[e.r]}</span>` : `<span class="banner soft">● Sighting logged ×${rec.count}</span>`;
+  const banner = (holoNew ? '<span class="banner holo">✦ Holo variant</span> ' : '')
+    + (isNew ? `<span class="banner r${e.r}">${PULL[e.r]}</span>` : `<span class="banner soft">● Sighting logged ×${rec.count}</span>`);
   const aura = typeColor(e);
+  // Power-up panel when a re-scan raises the card's level.
+  let powerHTML = '';
+  if (!isNew && lvAfter > lvBefore) {
+    const a = game.statsFor(e, lvBefore);
+    const b = game.statsFor(e, lvAfter);
+    powerHTML = `<section class="powerup chamfer">
+      <p class="pu-title">Power up <b>LV ${lvBefore} → ${lvAfter}</b></p>
+      <div class="pu-stars"><span class="stars-inline">${game.starsHTML(lvBefore)}</span><i>▸</i><span class="stars-inline new">${game.starsHTML(lvAfter)}</span></div>
+      <div class="pu-stats">${game.STAT_KEYS.map((k) => `<span>${k.toUpperCase()} <b>${b[k]}</b><em>+${b[k] - a[k]}</em></span>`).join('')}</div>
+    </section>`;
+  }
+  const extra = xpBarHTML(xpBefore, s.xp) + powerHTML;
+  const gradeStamp = grade ? `<div class="grade-stamp g-${grade.grade}" aria-label="Sync grade ${grade.grade}"><small>sync</small><b>${grade.grade}</b></div>` : '';
 
   const body = openSheet(`
-    <div class="stage${isNew ? ' charging' : ''}" style="--aura:${aura}" ${isNew ? 'role="button" tabindex="0" aria-label="Reveal card"' : ''}>
-      <div class="rays" aria-hidden="true"></div>
+    <div class="stage${isNew ? ' charging' : ''}${holoNew ? ' is-holo' : ''}" style="--aura:${aura}" ${isNew ? 'role="button" tabindex="0" aria-label="Reveal card"' : ''}>
+      <div class="rays" aria-hidden="true"></div>${gradeStamp}
       <div class="flip${isNew ? ' down' : ''}">
         <div class="face"><div class="tilt">${cardHTML(e, { tag: 'div' })}</div></div>
         ${isNew ? `<div class="back face">${cardBackHTML()}</div>` : ''}
       </div>
     </div>
     <div class="after"${isNew ? ' hidden' : ''}>
-      ${detailHTML(e, { banner, gains: gainsHTML, typing: true })}
+      ${detailHTML(e, { banner, gains: gainsHTML, extra, typing: true })}
       <div class="actions">
         <button type="button" class="btn" data-act="speak"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 010 6"/></svg>Play audio</button>
         <button type="button" class="btn primary" data-close>Continue</button>
@@ -702,8 +864,17 @@ async function register(e, form, alternatives = []) {
   { onClose: resetScanner });
 
   const after = $('.after', body);
+  const celebrate = () => {
+    const stage = $('.stage', body);
+    if (grade) { stage.classList.add('stamped'); setTimeout(() => sfx.grade(grade.grade), 250); }
+    if (holoNew) { stage.classList.add('revealed', 'holo-on'); setTimeout(() => { sfx.holo(); burst(stage, 5); flash(5); buzz([20, 30, 20, 30, 20, 30, 160]); }, 500); }
+    popGain(`+${shards}◆`, stage, { delay: 350 });
+    popGain(`+${xpGain} XP`, stage, { cls: 'xp', delay: 600 });
+    setTimeout(() => $('.xpbar', body)?.classList.add('go'), 300);
+  };
   const startDetail = () => {
     after.hidden = false;
+    celebrate();
     $$('[data-decode]', after).forEach((el) => decode(el));
     typeOut($('.dex-text .typed', after), e.t);
     if (isNew) setTimeout(() => speak(`${e.n}. ${e.t}`), 400);
@@ -723,6 +894,7 @@ async function register(e, form, alternatives = []) {
       const hold = [0, 0, 120, 450, 900][e.r];
       if (hold) { stage.classList.add('tease', `r${e.r}`); sfx.charge(); }
       setTimeout(() => {
+        stage.classList.remove('tease');
         $('.flip', stage).classList.remove('down');
         $('.actions.pre', body)?.remove();
         setTimeout(() => {
@@ -751,6 +923,7 @@ async function register(e, form, alternatives = []) {
     if (act.dataset.act === 'wrong') {
       // Roll back everything this registration did, then offer the other candidates.
       store.replaceState(snapshot);
+      levelUps.length = 0;
       if (isNew) await store.deletePhoto(e.k);
       refreshAll();
       stopSpeaking();
@@ -763,8 +936,13 @@ async function register(e, form, alternatives = []) {
 
 // ---------------------------------------------------------------- views
 function caughtKeys() { return Object.keys(state().caught).filter((k) => BY_KEY[k]); }
-function xp() { return caughtKeys().reduce((sum, k) => sum + RARITY[BY_KEY[k].r].value, 0); }
-const opLevel = () => 1 + Math.floor(Math.sqrt(xp() / 20));
+// Older saves had no XP total: start them at what their cards were worth.
+function migrate() {
+  const s = state();
+  if (!Number.isFinite(s.xp)) s.xp = caughtKeys().reduce((sum, k) => sum + RARITY[BY_KEY[k].r].value, 0);
+}
+const xp = () => state().xp || 0;
+const opLevel = () => game.levelForXP(xp());
 function rankFor(n) { let r = RANKS[0]; for (const x of RANKS) if (n >= x[0]) r = x; return r; }
 function unclaimedMissions() {
   const d = game.dailyState(state());
@@ -773,25 +951,30 @@ function unclaimedMissions() {
 
 let currentTab = 'scan';
 function refreshAll(bumpWallet = false) {
+  migrate();
   const s = state();
   const n = caughtKeys().length;
   $('#count-num').textContent = pad(n);
   $('#count-total').textContent = ENTRIES.length;
   $('#cards-bar').style.width = `${(n / ENTRIES.length) * 100}%`;
-  $('#shards').textContent = s.shards || 0;
+  countTo($('#shards'), s.shards || 0);
   // credits bar: how close the wallet is to affording an intel decrypt
   $('#shards-bar').style.width = `${Math.min(100, ((s.shards || 0) / game.DECRYPT_COST) * 100)}%`;
   const lvl = opLevel();
   $('#op-level').textContent = lvl;
-  const lo = 20 * (lvl - 1) ** 2;
-  const hi = 20 * lvl ** 2;
+  const lo = game.xpForLevel(lvl);
+  const hi = game.xpForLevel(lvl + 1);
   const C = 2 * Math.PI * 27;
   $('#lvl-arc').style.strokeDashoffset = C * (1 - Math.max(0.02, (xp() - lo) / (hi - lo)));
   if (bumpWallet) { const w = $('#meters'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
   const ev = game.weeklyEvent(s);
   $('#ops-badge').hidden = !(unclaimedMissions() || (ev.progress >= ev.goal && !ev.claimed));
+  $('#arena-badge').hidden = !(n && !(s.battle?.rival?.date === game.today() && s.battle.rival.won));
+  $('#id-badge').hidden = !(s.locker?.crates > 0);
+  $('#sys-line').innerHTML = `// OP: ${esc((s.name || 'operator').toUpperCase())} <i>|</i> ${esc(loot.titleName(s).toUpperCase())}`;
   renderRecent();
   if (currentTab === 'binder') renderBinder();
+  if (currentTab === 'arena') renderArena();
   if (currentTab === 'ops') renderOps();
   if (currentTab === 'id') renderProfile();
 }
@@ -838,7 +1021,7 @@ function renderBinder() {
   $('#grid').innerHTML = list.map((e) => {
     const rec = s.caught[e.k];
     const intel = !rec && s.intel[e.k];
-    const cls = `slot r${e.r}${rec ? ' owned' : ' locked'}${intel ? ' intel' : ''}`;
+    const cls = `slot r${e.r}${rec ? ' owned' : ' locked'}${intel ? ' intel' : ''}${rec?.holo ? ' holo' : ''}`;
     return `<button type="button" class="${cls}" data-slot="${e.k}" style="--rc:${rc[e.r]};--tc:${typeColor(e)}" aria-pressed="${binder.selected === e.k}"
       aria-label="#${pad(e.no)} ${rec || intel ? esc(e.n) : 'unknown'}${rec ? `, seen ${rec.count} times` : ', not captured'}">
       <span class="no">${pad(e.no)}</span><i class="rar"></i>
@@ -871,7 +1054,7 @@ function renderInvDetail(e) {
       <img src="${artURL(e)}" alt="">
     </div>
     <div class="inv-info">
-      <p class="inv-kind"><em style="color:${rarCol};font-style:normal">${RARITY[e.r].name}</em>${rec ? ` · LV ${lv}` : ''}<span>${types}</span></p>
+      <p class="inv-kind"><em style="color:${rarCol};font-style:normal">${RARITY[e.r].name}</em>${rec ? ` · LV ${lv} <em class="stars-inline">${game.starsHTML(lv)}</em>` : ''}${rec?.holo ? ' <b class="holo-txt">HOLO</b>' : ''}<span>${types}</span></p>
       <div class="inv-stats">${game.STAT_KEYS.map((k) => `<div class="inv-stat"><b>${rec ? `+${st[k]}` : '??'}</b>${k}<i class="seg"><em style="width:${rec ? st[k] : 0}%"></em></i></div>`).join('')}</div>
     </div>
     <div class="inv-use">
@@ -914,6 +1097,276 @@ $('#type-chips').addEventListener('click', (ev) => {
 });
 $('#sort').addEventListener('change', (ev) => { binder.sort = ev.target.value; renderBinder(); });
 $('#owned-only').addEventListener('change', (ev) => { binder.owned = ev.target.checked; renderBinder(); });
+
+// ---- arena (battles)
+const glyphs = (k) => AFFINITY[k].map((t) => glyph(t)).join('');
+function fighterChip(e, lv, { holo = false } = {}) {
+  return `<div class="fchip${holo ? ' holo' : ''}" style="--tc:${typeColor(e)}">
+    <img src="${artURL(e)}" alt="" loading="lazy"><b>LV${lv}</b><span class="fglyphs">${glyphs(e.k)}</span></div>`;
+}
+
+function renderArena() {
+  const s = state();
+  const b = battle.battleState(s);
+  $('#arena-sub').textContent = `W ${b.wins} · L ${b.losses}`;
+  if (!battle.owned(s).length) {
+    $('#arena').innerHTML = `<section class="card-box chamfer"><div class="box-head"><h3>No squad yet</h3></div>
+      <p class="about">Battles use the cards you've captured. Scan your first real animal, then come back to fight rivals with it.</p>
+      <button type="button" class="btn primary" data-goto-scan>Go scan</button></section>`;
+    return;
+  }
+  const r = battle.dailyRival(s);
+  store.save();
+  const keys = battle.squad(s);
+  const sims = battle.simsToday(s);
+  const pwr = Math.round(keys.reduce((a, k) => a + battle.pwrOf(s, k), 0));
+  const rivalLv = Math.round(r.lvs.reduce((a, x) => a + x, 0) / r.lvs.length);
+  $('#arena').innerHTML = `
+    <section class="card-box chamfer rival${r.won ? ' won' : ''}">
+      <div class="box-head"><h3>Daily rival</h3><small>${r.won ? 'defeated ✓ · new rival tomorrow' : `+${battle.RIVAL_REWARD.credits}◆ · +${battle.RIVAL_REWARD.xp} XP`}</small></div>
+      <div class="rival-id"><span class="dot-text">${dotSVG(r.name)}</span><span class="rival-lv">LV ${rivalLv}</span></div>
+      <div class="mini-team">${r.keys.map((k, i) => fighterChip(BY_KEY[k], r.lvs[i])).join('')}</div>
+      <button type="button" class="btn ${r.won ? '' : 'primary '}wide" data-fight="rival">${r.won ? 'Rematch for XP' : r.tries ? 'Try again' : 'Challenge'}</button>
+    </section>
+
+    <section class="card-box chamfer">
+      <div class="box-head"><h3>Your squad</h3><small>PWR ${pwr}</small></div>
+      <div class="squad">${[0, 1, 2].map((i) => {
+        const k = keys[i];
+        if (!k) return `<div class="sq-slot empty"><span>+</span><small>scan more animals</small></div>`;
+        const e = BY_KEY[k];
+        const rec = s.caught[k];
+        const lv = game.levelFor(rec.count);
+        return `<button type="button" class="sq-slot${rec.holo ? ' holo' : ''}" data-squad="${i}" style="--tc:${typeColor(e)}" aria-label="Squad slot ${i + 1}: ${esc(e.n)}, tap to change">
+          <span class="sq-no">${i + 1}</span><img src="${artURL(e)}" alt="">
+          <b>${esc(e.n)}</b><span class="fglyphs">${glyphs(k)}</span><small>LV ${lv} · PWR ${Math.round(battle.pwrOf(s, k))}</small></button>`;
+      }).join('')}</div>
+      <div class="btn-row"><button type="button" class="btn small" data-auto-squad>Auto-pick strongest</button><span class="about">Slot 1 fights first.</span></div>
+    </section>
+
+    <section class="card-box chamfer">
+      <div class="box-head"><h3>Wild signals</h3><small>${sims.paid}/${battle.SIM_PAID} paid wins today</small></div>
+      <p class="about">Practice battles against random signals at your squad's level. Wins pay +${battle.SIM_REWARD.credits}◆ · +${battle.SIM_REWARD.xp} XP (${battle.SIM_PAID} a day), then XP only.</p>
+      <button type="button" class="btn wide" data-fight="wild">Find a battle</button>
+    </section>
+
+    <section class="card-box chamfer">
+      <div class="box-head"><h3>Type matchups</h3><small>×1.5 damage</small></div>
+      <div class="typechart">${TYPE_IDS.map((t) => `<div style="--tc:${TYPES[t].color}">${glyph(t)}<b>${TYPES[t].name}</b><i>beats</i>${battle.STRONG[t].map((x) => `<span style="--tc:${TYPES[x].color}" title="${TYPES[x].name}">${glyph(x)}</span>`).join('')}</div>`).join('')}</div>
+      <p class="about" style="margin-top:10px">Hits against a type that beats yours are resisted (×0.67). Guard halves damage and charges <b>Overdrive</b>, a big hit with your best type. Holo cards get +10% HP, ATK and DEF.</p>
+    </section>
+
+    <section class="card-box chamfer">
+      <div class="box-head"><h3>Record</h3></div>
+      <div class="idstats three"><div><b>${pad(b.wins)}</b><span>Wins</span></div><div><b>${pad(b.losses)}</b><span>Losses</span></div><div><b>${pad(b.rivals)}</b><span>Rivals beaten</span></div></div>
+    </section>`;
+}
+
+$('#arena').addEventListener('click', (ev) => {
+  const s = state();
+  if (ev.target.closest('[data-goto-scan]')) { showTab('scan'); return; }
+  const f = ev.target.closest('[data-fight]');
+  if (f) { startBattle(f.dataset.fight); return; }
+  if (ev.target.closest('[data-auto-squad]')) {
+    battle.battleState(s).squad = battle.bestSquad(s);
+    store.save();
+    sfx.click();
+    renderArena();
+    return;
+  }
+  const slot = ev.target.closest('[data-squad]');
+  if (slot) pickSquad(Number(slot.dataset.squad));
+});
+
+function pickSquad(i) {
+  const s = state();
+  const keys = battle.squad(s);
+  const list = battle.owned(s).sort((a, b) => battle.pwrOf(s, b) - battle.pwrOf(s, a));
+  const body = openSheet(`<div class="detail-head"><p class="eyebrow">Squad slot ${i + 1}</p><h2 data-decode>Pick a card</h2><span class="sci">sorted by power</span></div>
+    <div class="choices">${list.map((k) => {
+      const e = BY_KEY[k];
+      const lv = game.levelFor(s.caught[k].count);
+      const at = keys.indexOf(k);
+      return `<button type="button" class="choice${at === i ? ' current' : ''}" data-k="${k}">
+        <span class="disc"><img src="${artURL(e)}" alt=""></span>
+        <span><b>${esc(e.n)}${s.caught[k].holo ? ' <em class="holo-txt">HOLO</em>' : ''}</b><i>LV ${lv} · ${AFFINITY[k].map((t) => TYPES[t].name).join(' / ')}${at >= 0 ? ` · in slot ${at + 1}` : ''}</i></span>
+        <span class="pct">${Math.round(battle.pwrOf(s, k))}</span></button>`;
+    }).join('')}</div>`);
+  body.addEventListener('click', (ev) => {
+    const c = ev.target.closest('[data-k]');
+    if (!c) return;
+    const k = c.dataset.k;
+    const next = keys.slice();
+    const at = next.indexOf(k);
+    if (at >= 0) next[at] = next[i];
+    next[i] = k;
+    battle.battleState(s).squad = next.filter(Boolean);
+    store.save();
+    sfx.click();
+    closeSheet();
+    renderArena();
+  });
+}
+
+// ---- battle screen
+let battleLocked = false;
+const MOVE_NAME = (m) => (m === 'guard' ? 'Guard' : m === 'overdrive' ? 'Overdrive' : `${TYPES[m.split(':')[1]].name} strike`);
+
+function startBattle(kind) {
+  const s = state();
+  const you = battle.squadTeam(s);
+  if (!you.length) return;
+  let foe;
+  let foeName;
+  if (kind === 'rival') { const r = battle.dailyRival(s); foe = battle.rivalTeam(r); foeName = r.name; } else { foe = battle.wildTeam(s, you.length); foeName = 'Wild signal'; }
+  const b = battle.newBattle(you, foe, { kind });
+  const me = s.name || 'Operator';
+  sfx.charge();
+  buzz([20, 30, 20]);
+  const sideHTML = (side, team) => `<div class="side ${side}" data-side="${side}">
+      <div class="plate"><p class="pl-name"></p><div class="hp"><span></span></div><div class="pl-row"><span class="hp-num"></span><span class="charge"></span></div></div>
+      <div class="fighter"><div class="disc"></div><img alt=""><div class="shield"></div></div>
+      <div class="bench">${team.map((_, i) => `<i data-b="${i}"></i>`).join('')}</div>
+    </div>`;
+  const body = openSheet(`<div class="battle${kind === 'rival' ? ' is-rival' : ''}">
+      <div class="bt-head"><span>${esc(me)}</span><b>VS</b><span>${esc(foeName)}</span></div>
+      <div class="field">${sideHTML('foe', foe)}${sideHTML('you', you)}<div class="bt-banner" aria-hidden="true"></div></div>
+      <div class="bt-log" aria-live="polite"></div>
+      <div class="moves"></div>
+    </div>`, { onClose: () => { battleLocked = false; renderArena(); } });
+  const root = $('.battle', body);
+  const sideEl = (side) => $(`.side.${side}`, root);
+  const logLine = (html) => {
+    const l = $('.bt-log', root);
+    l.insertAdjacentHTML('beforeend', `<div>${html}</div>`);
+    while (l.children.length > 3) l.firstChild.remove();
+  };
+
+  function drawSide(side, { enter = false } = {}) {
+    const f = battle.active(b[side]);
+    const el = sideEl(side);
+    el.style.setProperty('--tc', typeColor(f.e));
+    $('.pl-name', el).innerHTML = `${esc(f.e.n)} <small>LV${f.lv}</small> <span class="fglyphs">${glyphs(f.k)}</span>${f.holo ? ' <em class="holo-txt">HOLO</em>' : ''}`;
+    const img = $('.fighter img', el);
+    img.src = artURL(f.e);
+    $('.fighter', el).classList.toggle('holo', f.holo);
+    $('.fighter', el).classList.remove('faint', 'hurt', 'lunge', 'guarding');
+    if (enter) { $('.fighter', el).classList.remove('enter'); void el.offsetWidth; $('.fighter', el).classList.add('enter'); }
+    drawHP(side);
+    $$('.bench i', el).forEach((pip, i) => { pip.className = b[side].team[i].hp <= 0 ? 'out' : i === b[side].i ? 'on' : ''; });
+  }
+  function drawHP(side) {
+    const f = battle.active(b[side]);
+    const el = sideEl(side);
+    const pct = (f.hp / f.maxHp) * 100;
+    const bar = $('.hp span', el);
+    bar.style.width = `${pct}%`;
+    bar.className = pct < 25 ? 'low' : pct < 55 ? 'mid' : '';
+    $('.hp-num', el).textContent = `${f.hp}/${f.maxHp}`;
+    $('.charge', el).innerHTML = Array.from({ length: battle.CHARGE_MAX }, (_, i) => `<i class="${i < f.charge ? 'on' : ''}"></i>`).join('');
+  }
+  function drawMoves(enabled = true) {
+    const f = battle.active(b.you);
+    const foeF = battle.active(b.foe);
+    const hint = (t) => { const m = battle.mult(t, foeF.types); return m > 1 ? '<em class="sup">super</em>' : m < 1 ? '<em class="weak">weak</em>' : ''; };
+    const ready = f.charge >= battle.CHARGE_MAX;
+    $('.moves', root).innerHTML = `${f.types.map((t) => `<button type="button" class="move" data-move="strike:${t}" style="--tc:${TYPES[t].color}" ${enabled ? '' : 'disabled'}>${glyph(t)}<span>${TYPES[t].name} strike</span>${hint(t)}</button>`).join('')}
+      <button type="button" class="move guard" data-move="guard" ${enabled ? '' : 'disabled'}><svg viewBox="0 0 24 24" class="glyph"><path d="M12 3 4 6v6c0 4.4 3.4 8 8 9 4.6-1 8-4.6 8-9V6Z"/></svg><span>Guard</span><em>+1 charge</em></button>
+      <button type="button" class="move od${ready ? ' ready' : ''}" data-move="overdrive" ${enabled && ready ? '' : 'disabled'}><svg viewBox="0 0 24 24" class="glyph"><path d="M13.5 2 5 13.5h6.2L10 22l9-12h-6.2Z"/></svg><span>Overdrive</span><em>${ready ? 'ready!' : `${f.charge}/${battle.CHARGE_MAX}`}</em></button>`;
+  }
+
+  drawSide('foe', { enter: true });
+  drawSide('you', { enter: true });
+  drawMoves();
+  logLine(`<b>${esc(foeName)}</b> sends out <b>${esc(battle.active(b.foe).e.n)}</b>!`);
+  logLine(`Go, <b>${esc(battle.active(b.you).e.n)}</b>!`);
+
+  root.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-move]');
+    if (btn && !btn.disabled && !b.over && !battleLocked) {
+      battleLocked = true;
+      drawMoves(false);
+      const events = battle.playTurn(b, btn.dataset.move);
+      for (const e of events) { await playEvent(e); if (!body.isConnected) return; }
+      battleLocked = false;
+      if (b.over) finish(b.winner === 'you');
+      else drawMoves();
+      return;
+    }
+    const act = ev.target.closest('[data-bt]');
+    if (act?.dataset.bt === 'again') { closeSheet(); startBattle(kind); }
+  });
+
+  async function playEvent(e) {
+    const fx = reducedMotion() ? 0.3 : 1;
+    if (e.t === 'guard') {
+      const el = sideEl(e.side);
+      $('.fighter', el).classList.add('guarding');
+      sfx.guard();
+      logLine(`<b>${esc(e.name)}</b> braces behind a guard.`);
+      drawHP(e.side);
+      await sleep(600 * fx);
+    } else if (e.t === 'attack') {
+      const att = $('.fighter', sideEl(e.side));
+      const tgt = $('.fighter', sideEl(e.target));
+      att.classList.remove('lunge'); void att.offsetWidth; att.classList.add('lunge');
+      if (e.move === 'overdrive') { sfx.overdrive(); root.classList.add('od-flash'); setTimeout(() => root.classList.remove('od-flash'), 500); }
+      await sleep(220 * fx);
+      tgt.classList.remove('hurt'); void tgt.offsetWidth; tgt.classList.add('hurt');
+      sfx.hit(e.mult);
+      buzz(e.crit || e.move === 'overdrive' ? [30, 30, 70] : e.mult > 1 ? 40 : 20);
+      drawHP(e.target);
+      drawHP(e.side);
+      popGain(`-${e.dmg}`, tgt, { cls: e.mult > 1 ? 'dmg super' : e.mult < 1 ? 'dmg weak' : 'dmg' });
+      const note = [e.crit ? 'Critical!' : '', e.mult > 1 ? 'Super effective!' : e.mult < 1 ? 'Resisted…' : ''].filter(Boolean).join(' ');
+      logLine(`<b>${esc(e.name)}</b> used <span style="color:${TYPES[e.type].color}">${MOVE_NAME(e.move === 'overdrive' ? 'overdrive' : e.move)}</span> · ${e.dmg} dmg${note ? ` · <em>${note}</em>` : ''}`);
+      if (e.mult > 1 || e.crit || e.move === 'overdrive') banner(e.move === 'overdrive' ? 'OVERDRIVE' : e.crit ? 'CRITICAL' : 'SUPER');
+      $('.fighter', sideEl(e.target)).classList.remove('guarding');
+      await sleep(750 * fx);
+    } else if (e.t === 'faint') {
+      const el = sideEl(e.side);
+      $('.fighter', el).classList.add('faint');
+      sfx.faint();
+      logLine(`<b>${esc(e.name)}</b> is out of the fight!`);
+      $$('.bench i', el).forEach((pip, i) => { if (b[e.side].team[i].hp <= 0) pip.className = 'out'; });
+      await sleep(800 * fx);
+    } else if (e.t === 'enter') {
+      drawSide(e.side, { enter: true });
+      logLine(`${e.side === 'you' ? 'Go' : 'Next up'}, <b>${esc(e.name)}</b>!`);
+      await sleep(550 * fx);
+    }
+  }
+  function banner(text) {
+    const el = $('.bt-banner', root);
+    el.textContent = text;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
+
+  function finish(won) {
+    const xpBefore = s.xp;
+    const reward = battle.settle(s, kind, won);
+    s.shards = (s.shards || 0) + reward.credits;
+    earnXP(reward.xp);
+    store.save();
+    refreshAll(true);
+    (won ? sfx.win : sfx.lose)();
+    buzz(won ? [40, 60, 40, 60, 160] : [120]);
+    const more = kind === 'wild' || !won;
+    $('.moves', root).innerHTML = '';
+    $('.bt-log', root).insertAdjacentHTML('afterend', `<div class="bt-result ${won ? 'win' : 'lose'}">
+      <span class="dot-text bt-word"><span class="sr">${won ? 'Victory' : 'Defeat'}</span>${dotSVG(won ? 'VICTORY' : 'DEFEAT')}</span>
+      <div class="gains">${reward.credits ? `<span class="gain hl">+${reward.credits}◆</span>` : ''}<span class="gain${won ? ' hl' : ''}">+${reward.xp} XP</span>
+        ${kind === 'rival' && won && reward.credits ? '<span class="gain hl">rival defeated</span>' : ''}${!reward.credits && won ? `<span class="gain">${kind === 'rival' ? 'rival already beaten today' : 'daily paid wins used'}</span>` : ''}</div>
+      ${xpBarHTML(xpBefore, s.xp)}
+      <p class="about">${won ? 'Level your cards by re-scanning the real animals — every level adds +3 to each stat.' : 'Tip: check the type matchups and put a counter in slot 1. Guard to build Overdrive.'}</p>
+      <div class="actions">${more ? `<button type="button" class="btn" data-bt="again">${kind === 'rival' ? 'Try again' : 'Battle again'}</button>` : ''}<button type="button" class="btn primary" data-close>Done</button></div>
+    </div>`);
+    const res = $('.bt-result', root);
+    if (won) { burst(res, 3); popGain(reward.credits ? `+${reward.credits}◆` : `+${reward.xp} XP`, res, { delay: 200 }); }
+    setTimeout(() => $('.xpbar', res)?.classList.add('go'), 250);
+    res.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+}
 
 // ---- ops
 const ACHV_ICON = '<svg viewBox="0 0 24 24"><path d="m12 3 2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7Z"/></svg>';
@@ -981,8 +1434,14 @@ function renderOps() {
 }
 $('#ops').addEventListener('click', (ev) => {
   if (ev.target.closest('[data-claim-event]')) {
+    const btn = ev.target.closest('[data-claim-event]');
     const gained = game.claimEvent(state());
-    if (gained) { store.save(); sfx.reveal(2); toast(`EVENT CLEARED · +${gained}◆`); refreshAll(true); }
+    if (gained) {
+      earnXP(game.EVENT_XP);
+      store.save(); sfx.reveal(2); buzz([30, 40, 90]);
+      popGain(`+${gained}◆`, btn); popGain(`+${game.EVENT_XP} XP`, btn, { cls: 'xp', delay: 200 });
+      toast(`EVENT CLEARED · +${gained}◆`); refreshAll(true); flushLevelUps();
+    }
     return;
   }
   const pin = ev.target.closest('[data-map-key]');
@@ -992,10 +1451,15 @@ $('#ops').addEventListener('click', (ev) => {
   if (!b) return;
   const gained = game.claimMission(state(), b.dataset.claim);
   if (gained) {
+    earnXP(game.MISSION_XP);
     store.save();
     sfx.coin();
-    toast(`+${gained}◆ DATA SHARDS`);
+    buzz(25);
+    popGain(`+${gained}◆`, b);
+    popGain(`+${game.MISSION_XP} XP`, b, { cls: 'xp', delay: 200 });
+    toast(`+${gained}◆ CREDITS`);
     refreshAll(true);
+    flushLevelUps();
   }
 });
 
@@ -1026,6 +1490,7 @@ function renderProfile() {
       <div class="id-top"><span>OPERATOR</span><b>OP-${operatorId()}</b></div>
       <label for="collector-name">Callsign</label>
       <input id="collector-name" maxlength="18" placeholder="Enter name" value="${esc(s.name)}" autocomplete="nickname" spellcheck="false">
+      <p class="op-title">${esc(loot.titleName(s))}</p>
       <div class="rank">Rank <b>${esc(rankName)}</b> · Lv ${opLevel()}
         <small>${next ? `${next[0] - n} more cards to ${next[1]}` : 'Every card collected. Legendary.'}</small></div>
       <div class="idstats">
@@ -1038,12 +1503,17 @@ function renderProfile() {
       <div class="barcode" aria-hidden="true"></div>
     </section>
 
+    ${supplyHTML()}
+    ${lockerHTML()}
+
     <section class="card-box chamfer">
       <div class="box-head"><h3>Config</h3></div>
       <label class="toggle"><span>Voice<small>Narrate new cards aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
       <label class="toggle"><span>Sound FX<small>Scanner blips and reveal chimes</small></span>
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
+      <label class="toggle"><span>Haptics<small>Vibrate on captures, hits and rewards</small></span>
+        <input type="checkbox" class="switch" data-setting="haptics" ${s.settings.haptics !== false ? 'checked' : ''}></label>
       <label class="toggle"><span>Card tilt<small>Cards follow your phone's motion</small></span>
         <input type="checkbox" class="switch" data-setting="tilt" ${s.settings.tilt ? 'checked' : ''}></label>
       <label class="toggle"><span>Location tags<small>Save roughly where you found each animal (about 1 km, kept on this phone)</small></span>
@@ -1119,6 +1589,13 @@ $('#profile').addEventListener('submit', (ev) => {
   openCompare(friend);
 });
 $('#profile').addEventListener('click', async (ev) => {
+  const s = state();
+  const tb = ev.target.closest('[data-title]');
+  if (tb) { loot.locker(s).title = tb.dataset.title; store.save(); sfx.click(); buzz(10); refreshAll(); renderProfile(); return; }
+  const fb = ev.target.closest('[data-frame]');
+  if (fb) { loot.locker(s).frame = fb.dataset.frame; store.save(); sfx.click(); buzz(10); refreshAll(); renderProfile(); return; }
+  const cb = ev.target.closest('[data-crate]');
+  if (cb) { crateFlow(cb.dataset.crate === 'free'); return; }
   const act = ev.target.closest('[data-act]');
   if (!act) return;
   if (act.dataset.act === 'share') {
@@ -1148,6 +1625,114 @@ $('#profile').addEventListener('click', async (ev) => {
   }
   if (act.dataset.act === 'intro') showIntro();
 });
+
+// ---- supply crates & locker (cosmetics only)
+const CRATE_SVG = `<svg viewBox="0 0 120 100" aria-hidden="true">
+  <g class="lid"><path class="c-body" d="M14 30 24 16h72l10 14Z"/><path class="c-seam" d="M24 16h72"/></g>
+  <path class="c-body" d="M14 30h92v54l-10 10H24L14 84Z"/>
+  <path class="c-seam" d="M14 30h92M60 30v64M34 30v64M86 30v64"/>
+  <path class="c-glow" d="M14 30h92"/>
+  <text x="60" y="68" text-anchor="middle">WD</text></svg>`;
+
+function supplyHTML() {
+  const s = state();
+  const l = loot.locker(s);
+  const canBuy = (s.shards || 0) >= loot.CRATE_COST;
+  return `<section class="card-box chamfer supply">
+    <div class="box-head"><h3>Supply</h3><small>${l.opened} opened</small></div>
+    <div class="crate-row"><div class="crate mini">${CRATE_SVG}${l.crates ? `<i class="crate-count">${l.crates}</i>` : ''}</div>
+      <p class="about">Supply crates hold <b>card frames</b> and <b>operator titles</b>. You earn one every level-up, or buy one with credits. No animals inside — those you scan for real.</p></div>
+    <div class="btn-row">
+      ${l.crates ? `<button type="button" class="btn small primary" data-crate="free">Open crate (${l.crates})</button>` : ''}
+      <button type="button" class="btn small${!l.crates && canBuy ? ' primary' : ''}" data-crate="buy" ${canBuy ? '' : 'disabled'}>Buy · ${loot.CRATE_COST}◆</button>
+    </div>
+  </section>`;
+}
+
+function lockerHTML() {
+  const s = state();
+  const l = loot.locker(s);
+  const fCount = Object.keys(loot.FRAMES).length;
+  const tCount = Object.keys(loot.TITLES).length;
+  return `<section class="card-box chamfer locker">
+    <div class="box-head"><h3>Locker</h3><small>${l.frames.length}/${fCount} frames · ${l.titles.length}/${tCount} titles</small></div>
+    <p class="lbl">Card frame</p>
+    <div class="frame-grid">${Object.entries(loot.FRAMES).map(([id, f]) => (l.frames.includes(id)
+      ? `<button type="button" class="frame-pick" data-frame="${id}" aria-pressed="${l.frame === id}" style="--tier:${loot.TIERS[f.r]?.color || 'var(--steel)'}"><span class="swatch card skin-${id}"></span><b>${f.name}</b></button>`
+      : `<div class="frame-pick locked"><span class="swatch"></span><b>???</b></div>`)).join('')}</div>
+    <p class="lbl">Title</p>
+    <div class="title-chips">${Object.entries(loot.TITLES).map(([id, t]) => (l.titles.includes(id)
+      ? `<button type="button" data-title="${id}" aria-pressed="${l.title === id}" style="--tier:${loot.TIERS[t.r]?.color || 'var(--steel)'}">${esc(t.name)}</button>`
+      : '<span class="locked">? ? ?</span>')).join('')}</div>
+  </section>`;
+}
+
+function crateFlow(free) {
+  const s = state();
+  const res = loot.openCrate(s, { free });
+  if (!res) { toast(free ? 'NO CRATES LEFT' : `NEED ${loot.CRATE_COST}◆`); return; }
+  store.save();
+  refreshAll(true);
+  const tier = loot.TIERS[res.r];
+  const body = openSheet(`<div class="detail-head"><p class="eyebrow">Supply crate</p><h2 data-decode>Crack it open</h2><span class="sci">tap the crate</span></div>
+    <div class="crate-stage" style="--tier:${tier.color}">
+      <div class="crate big" role="button" tabindex="0" aria-label="Tap to open the crate">${CRATE_SVG}</div>
+      <p class="crate-hint">TAP ×3</p>
+    </div>
+    <div class="crate-result" hidden></div>`);
+  const crate = $('.crate.big', body);
+  const stage = $('.crate-stage', body);
+  let hits = 0;
+  const tap = () => {
+    if (hits >= 3) return;
+    hits++;
+    crate.classList.remove('hit'); void crate.offsetWidth; crate.classList.add('hit', `h${hits}`);
+    sfx.crack(hits);
+    buzz(15 * hits);
+    $('.crate-hint', body).textContent = hits < 3 ? `TAP ×${3 - hits}` : '';
+    if (hits === 3) setTimeout(openIt, 250);
+  };
+  const openIt = () => {
+    stage.classList.add('open', `t${res.r}`);
+    burst(stage, res.r >= 4 ? 4 : res.r + 1);
+    if (res.r >= 3) setTimeout(() => burst(stage, res.r >= 4 ? 4 : 3), 250);
+    flash(res.r >= 4 ? 4 : 0);
+    sfx.reveal(res.r);
+    buzz(res.r >= 3 ? [40, 50, 40, 50, 160] : [30, 40, 80]);
+    const s2 = state();
+    const sample = BY_KEY[battle.owned(s2)[0]] || ENTRIES[0];
+    const preview = res.kind === 'frame'
+      ? `<div class="loot-card"><div class="card r1 skin-${res.id}" style="--tc:${typeColor(sample)}"><div class="card-top"><span>#${pad(sample.no)}</span><span class="tdot"></span></div><div class="card-art"><div class="disc"></div><img src="${artURL(sample)}" alt=""></div><div class="card-name">${esc(sample.n)}</div></div></div>`
+      : `<div class="loot-title"><small>operator title</small><b>${esc(res.name)}</b></div>`;
+    const r = $('.crate-result', body);
+    r.innerHTML = `<p class="loot-tier" style="color:${tier.color}">${tier.name} ${res.kind}</p>
+      <p class="loot-name">${esc(res.name)}</p>
+      ${preview}
+      ${res.dupe ? `<p class="about center">Already in your locker — refunded <b>+${loot.DUPE_REFUND}◆</b>.</p>` : `<p class="about center">${res.kind === 'frame' ? esc(res.desc) : 'Shown on your ID and in the header.'}</p>`}
+      <div class="actions">
+        ${!res.dupe ? '<button type="button" class="btn primary" data-equip>Equip</button>' : ''}
+        ${loot.locker(s2).crates || (s2.shards || 0) >= loot.CRATE_COST ? `<button type="button" class="btn" data-again>Open another${loot.locker(s2).crates ? '' : ` · ${loot.CRATE_COST}◆`}</button>` : ''}
+        <button type="button" class="btn${res.dupe ? ' primary' : ''}" data-close>Done</button>
+      </div>`;
+    r.hidden = false;
+    if (res.dupe) popGain(`+${loot.DUPE_REFUND}◆`, r, { delay: 300 });
+    refreshAll(true);
+  };
+  crate.addEventListener('click', tap);
+  crate.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); tap(); } });
+  body.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-equip]')) {
+      const l = loot.locker(state());
+      if (res.kind === 'frame') l.frame = res.id; else l.title = res.id;
+      store.save();
+      sfx.coin();
+      toast(`${res.name.toUpperCase()} EQUIPPED`);
+      closeSheet();
+      refreshAll();
+    }
+    if (ev.target.closest('[data-again]')) { closeSheet(); crateFlow(loot.locker(state()).crates > 0); }
+  });
+}
 
 // ---------------------------------------------------------------- location tags (opt-in)
 const fmtLoc = ([lat, lon]) => `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
@@ -1322,6 +1907,7 @@ function showTab(tab) {
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== tab; });
   if (tab === 'scan') { if (wantCamera && !stream) startCamera(); } else stopCamera();
   if (tab === 'binder') renderBinder();
+  if (tab === 'arena') renderArena();
   if (tab === 'ops') renderOps();
   if (tab === 'id') renderProfile();
   if (changed) window.scrollTo({ top: 0 });
@@ -1365,8 +1951,9 @@ function showIntro() {
     <ol class="intro-steps">
       <li><div><b>Scan</b><span>Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and slowly slide your phone left, then right. Cards only drop for live 3D animals — never photos, screens or videos.</span></div></li>
       <li><div><b>Pull the card</b><span>New species drop a sealed card. Tap to decrypt it and add it to your binder.</span></div></li>
-      <li><div><b>Level up</b><span>Scan the same animal again to level its card and boost its stats. Every sighting earns ◆ data shards.</span></div></li>
-      <li><div><b>Complete</b><span>${ENTRIES.length} cards · ${TYPE_IDS.length} affinities · ${SETS.length} sectors. Clear daily orders, keep your streak, and spend shards to decrypt intel on cards you haven't found.</span></div></li>
+      <li><div><b>Level up</b><span>Scan the same animal again to power up its card — more stars, better stats. A smooth sweep earns a higher sync grade, and any scan can drop a rare <b>holo</b> card.</span></div></li>
+      <li><div><b>Battle</b><span>Build a squad of three in the Arena and beat today's rival. Use type matchups: every affinity beats two others.</span></div></li>
+      <li><div><b>Complete</b><span>${ENTRIES.length} cards · ${TYPE_IDS.length} affinities · ${SETS.length} sectors. Clear daily orders, keep your streak, level up for supply crates, and spend credits on intel and crates.</span></div></li>
     </ol>
     <p class="fact">All recognition happens on your device. Nothing is uploaded.</p>
     <div class="actions"><button type="button" class="btn primary" data-close>Start collecting</button></div>`, {
@@ -1434,7 +2021,7 @@ async function boot() {
   startTwinkle();
   let tab = 'scan';
   try { tab = sessionStorage.getItem('wilddex.tab') || 'scan'; } catch { /* ignore */ }
-  if (!['scan', 'binder', 'ops', 'id'].includes(tab)) tab = 'scan';
+  if (!['scan', 'binder', 'arena', 'ops', 'id'].includes(tab)) tab = 'scan';
   refreshAll();
   log('wilddex_os · on-device mode', 'cmd');
   idle();
