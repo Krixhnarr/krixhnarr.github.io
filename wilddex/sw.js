@@ -1,7 +1,7 @@
 // Offline support. The app shell is refreshed in the background
 // (stale-while-revalidate); the ~15 MB model, TF.js bundle, 3D art and fonts are cached on
 // first use and served from cache afterwards. Scope is /wilddex/ only.
-const VERSION = 'wilddex-v11';
+const VERSION = 'wilddex-v12';
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/game.js',
   'js/battle.js',
   'js/loot.js',
+  'js/pip.js',
   'js/liveness.js',
   'js/parallax.js',
   'js/dotmatrix.js',
@@ -21,7 +22,7 @@ const SHELL = [
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',
-  'fonts/michroma-latin.woff2',
+  'fonts/russo-one-latin.woff2',
   'fonts/jetbrains-mono-latin.woff2',
 ];
 

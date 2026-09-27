@@ -44,10 +44,14 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   rotating weekly events.
 - **Storage**: progress in `localStorage`, capture photos in IndexedDB, with
   backup/restore on the ID screen.
-- **Look**: game-inventory HUD — charcoal panels, lavender accent, wide
-  Michroma headings (self-hosted with JetBrains Mono), level ring, stat bars,
-  waveform decorations and chamfered frames; the Inventory tab is a slot grid
-  with a selected-item detail panel.
+- **Look**: a game shell — a Home hub (featured card, big Scan button and
+  live tiles for rival, orders, crates, streak, event and collection), bottom
+  icon tab bar with a raised Scan button, level/XP chip and currency pills in
+  the header, chunky press-down buttons in Russo One, LED dot-matrix titles,
+  a drifting glow-and-grid background and idle motion throughout.
+- **Pip** (`js/pip.js`): the field-drone mascot on Home and in pop-up
+  dialogue — greets, gives counter-type tips for the daily rival, teases a
+  nearby animal, and reacts to captures, holos, failed scans and battles.
 
 Plain static files, no build step. When changing app files, bump `VERSION`
 in `sw.js` so installed copies pick up the update.

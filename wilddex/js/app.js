@@ -9,6 +9,7 @@ import { recordSweep, analyseSweep } from './parallax.js';
 import { renderDots, startTwinkle, dotSVG } from './dotmatrix.js';
 import * as battle from './battle.js';
 import * as loot from './loot.js';
+import { pipSVG } from './pip.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -129,15 +130,17 @@ function typeOut(el, text, cps = 70) {
 
 // ---------------------------------------------------------------- terminal log
 const term = $('#term');
+// The scanner status line shows only the newest message, without log prefixes.
+const clean = (html) => html.replace(/^(\[(ok|err|warn|\.\.)\]|&gt;)\s*/, '');
 function log(html, cls = '') {
   const line = document.createElement('div');
   if (cls) line.className = cls;
-  line.innerHTML = html;
+  line.innerHTML = clean(html);
   term.appendChild(line);
   while (term.children.length > 6) term.firstChild.remove();
   return line;
 }
-const idle = () => log('&gt; awaiting target');
+const idle = () => log('Ready · point at a real animal');
 const asciiBar = (p, n = 12) => '█'.repeat(Math.round(p * n)) + '░'.repeat(n - Math.round(p * n));
 
 // ---------------------------------------------------------------- UI helpers
@@ -149,6 +152,24 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
+
+// Pip pops up with a line of dialogue (tap to dismiss).
+let pipTimer;
+function pipSay(text, mood = 'happy', ms = 4200) {
+  const el = $('#pip-toast');
+  el.innerHTML = `${pipSVG(mood, 'mini')}<p class="bubble">${text}</p>`;
+  el.hidden = false;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  tone(1760, 0, 0.04, 'sine', 0.03); tone(2349, 0.06, 0.07, 'sine', 0.03);
+  clearTimeout(pipTimer);
+  pipTimer = setTimeout(hidePip, ms);
+}
+function hidePip() {
+  const el = $('#pip-toast');
+  el.classList.remove('show');
+  setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 300);
+}
+$('#pip-toast').addEventListener('click', () => { clearTimeout(pipTimer); hidePip(); });
 
 function flash(rarity = 0) {
   const f = document.createElement('div');
@@ -259,6 +280,7 @@ function openSheet(html, { onClose } = {}) {
   body.innerHTML = html;
   if (sheet.hidden) lastFocus = document.activeElement;
   sheet.hidden = false;
+  document.body.classList.add('sheet-open');
   $('.sheet-panel', sheet).scrollTop = 0;
   $('.sheet-panel', sheet).focus({ preventScroll: true });
   hydratePhotos(body);
@@ -270,6 +292,7 @@ function closeSheet() {
   const sheet = $('#sheet');
   if (sheet.hidden) return;
   sheet.hidden = true;
+  document.body.classList.remove('sheet-open');
   $('#sheet-body').innerHTML = '';
   stopSpeaking();
   gyroTarget = null;
@@ -589,11 +612,11 @@ function warmModel() {
     let line = null;
     modelPromise = loadModel((p) => {
       if (isReady() || p >= 1) return;
-      const html = `[..] loading neural core ${asciiBar(p)} ${Math.round(p * 100)}%`;
-      if (line && line.isConnected) line.innerHTML = html; else line = log(html);
+      const html = `[..] loading scanner ${asciiBar(p, 8)} ${Math.round(p * 100)}%`;
+      if (line && line.isConnected) line.innerHTML = clean(html); else line = log(html);
     }).then((m) => {
-      const msg = `[ok] neural core online · ${ENTRIES.length} signatures`;
-      if (line && line.isConnected) { line.className = 'ok'; line.innerHTML = msg; } else log(msg, 'ok');
+      const msg = `[ok] scanner ready · ${ENTRIES.length} animals known`;
+      if (line && line.isConnected) { line.className = 'ok'; line.innerHTML = clean(msg); } else log(msg, 'ok');
       return m;
     }).catch((err) => {
       modelPromise = null;
@@ -693,24 +716,24 @@ async function handleVerdict(v) {
       sfx.fail();
       log(`[err] liveness failed · flat surface · ${d.parallax || 0}/${d.tracks} depth points`, 'err');
       log('[err] photos, prints & screens can\'t be registered', 'err');
-      toast('FLAT IMAGE DETECTED · SCAN A LIVE ANIMAL');
+      pipSay('Hmm… that looked <b>flat</b>, like a photo or screen. I can only log real, live animals!', 'sad');
     } else if (d.verdict === 'video') {
       sfx.fail();
       log(`[err] liveness failed · moving image on a flat screen · ${d.indep} pts`, 'err');
       log('[err] videos on screens can\'t be registered', 'err');
-      toast('VIDEO ON A SCREEN DETECTED · SCAN A LIVE ANIMAL');
+      pipSay('Nice try — that\'s a <b>video on a screen</b>. Let\'s find a real one!', 'sad');
     } else if (d.verdict === 'still') {
       sfx.again();
       log('[warn] no depth signal · slide the phone left, then right, while scanning', 'warn');
-      toast('SLIDE YOUR PHONE LEFT, THEN RIGHT');
+      pipSay('I need depth! <b>Slide your phone left, then right</b> while I scan.', 'idle');
     } else if (d.verdict === 'oneway') {
       sfx.again();
       log('[warn] one-way motion · slide left AND back right to verify depth', 'warn');
-      toast('SLIDE LEFT, THEN BACK RIGHT');
+      pipSay('Almost! Slide <b>left and then back right</b> so I can see it in 3D.', 'idle');
     } else {
       sfx.again();
       log('[warn] too little detail to verify · move closer or add light', 'warn');
-      toast('CAN\'T VERIFY · MOVE CLOSER OR ADD LIGHT');
+      pipSay('Too blurry for me. <b>Move closer</b> or find more light.', 'sad');
     }
     setTimeout(resetScanner, 2200);
   } else if (v.kind === 'spoof') {
@@ -719,7 +742,7 @@ async function handleVerdict(v) {
       ? `[err] liveness failed · <b>${esc(snake(LABELS[v.spoof.label]))}</b> · conf=${conf(v.spoof.score)}`
       : `[err] liveness failed · <b>display_or_print_frame</b> detected`, 'err');
     log('[err] screens & prints can\'t be registered', 'err');
-    toast('SCREEN OR PRINT DETECTED · SCAN A REAL ANIMAL');
+    pipSay('That\'s a <b>screen or a print</b>. Real animals only, partner!', 'sad');
     setTimeout(resetScanner, 2200);
   } else if (v.kind === 'unsure') {
     sfx.again();
@@ -728,6 +751,7 @@ async function handleVerdict(v) {
   } else if (v.kind === 'object') {
     sfx.fail();
     log(`[err] not fauna: <b>${esc(snake(LABELS[v.object]))}</b> · conf=${conf(v.objectScore)}`, 'err');
+    pipSay(`That looks like a <b>${esc(LABELS[v.object].split(',')[0])}</b>, not an animal!`, 'idle');
     setTimeout(resetScanner, 1800);
   } else {
     sfx.fail();
@@ -871,6 +895,13 @@ async function register(e, form, alternatives = []) {
     popGain(`+${shards}◆`, stage, { delay: 350 });
     popGain(`+${xpGain} XP`, stage, { cls: 'xp', delay: 600 });
     setTimeout(() => $('.xpbar', body)?.classList.add('go'), 300);
+    const line = holoNew ? ['WHOA — a <b>holo</b>! Only about 1 in 40 scans finds one.', 'wow']
+      : isNew && e.r === 4 ? [`A <b>Legendary</b>! I've never seen a real ${esc(e.n.toLowerCase())} before!`, 'wow']
+        : isNew && e.r === 3 ? [`A <b>Rare</b> card! ${esc(e.n)} is a great find.`, 'wow']
+          : grade?.grade === 'S' ? ['Perfect sync! That sweep was <b>flawless</b>.', 'happy']
+            : !isNew && lvAfter > lvBefore ? [`${esc(e.n)} powered up to <b>LV ${lvAfter}</b>!`, 'happy']
+              : isNew ? [`${esc(e.n)} logged! That's card <b>#${caughtKeys().length}</b> in your binder.`, 'happy'] : null;
+    if (line) setTimeout(() => pipSay(...line), 1300);
   };
   const startDetail = () => {
     after.hidden = false;
@@ -949,30 +980,28 @@ function unclaimedMissions() {
   return d.missions.filter((m) => (d.progress[m.id] || 0) >= m.goal && !d.claimed[m.id]).length;
 }
 
-let currentTab = 'scan';
+let currentTab = 'home';
 function refreshAll(bumpWallet = false) {
   migrate();
   const s = state();
   const n = caughtKeys().length;
-  $('#count-num').textContent = pad(n);
-  $('#count-total').textContent = ENTRIES.length;
-  $('#cards-bar').style.width = `${(n / ENTRIES.length) * 100}%`;
   countTo($('#shards'), s.shards || 0);
-  // credits bar: how close the wallet is to affording an intel decrypt
-  $('#shards-bar').style.width = `${Math.min(100, ((s.shards || 0) / game.DECRYPT_COST) * 100)}%`;
   const lvl = opLevel();
   $('#op-level').textContent = lvl;
+  $('#op-name').textContent = s.name || 'Operator';
   const lo = game.xpForLevel(lvl);
   const hi = game.xpForLevel(lvl + 1);
-  const C = 2 * Math.PI * 27;
-  $('#lvl-arc').style.strokeDashoffset = C * (1 - Math.max(0.02, (xp() - lo) / (hi - lo)));
+  $('#op-xp-bar').style.width = `${Math.max(4, ((xp() - lo) / (hi - lo)) * 100)}%`;
+  const crates = s.locker?.crates || 0;
+  $('#crates').textContent = crates;
+  $('.pill.crates').classList.toggle('hot', crates > 0);
   if (bumpWallet) { const w = $('#meters'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
   const ev = game.weeklyEvent(s);
   $('#ops-badge').hidden = !(unclaimedMissions() || (ev.progress >= ev.goal && !ev.claimed));
   $('#arena-badge').hidden = !(n && !(s.battle?.rival?.date === game.today() && s.battle.rival.won));
-  $('#id-badge').hidden = !(s.locker?.crates > 0);
-  $('#sys-line').innerHTML = `// OP: ${esc((s.name || 'operator').toUpperCase())} <i>|</i> ${esc(loot.titleName(s).toUpperCase())}`;
+  $('#id-badge').hidden = !crates;
   renderRecent();
+  if (currentTab === 'home') renderHome();
   if (currentTab === 'binder') renderBinder();
   if (currentTab === 'arena') renderArena();
   if (currentTab === 'ops') renderOps();
@@ -1044,7 +1073,7 @@ function renderInvDetail(e) {
   const types = AFFINITY[e.k].map((t) => `<b style="color:${TYPES[t].color}">${TYPES[t].name}</b>`).join(' / ');
   const rarCol = { 1: 'var(--steel)', 2: 'var(--accent-soft)', 3: 'var(--accent-hi)', 4: 'var(--gold)' }[e.r];
   $('#inv-detail').innerHTML = `
-    <p class="inv-name">${known ? `${esc(e.n)} <small>// ${esc(e.s)}</small>` : `? ? ? <small>// SIGNAL #${pad(e.no)} ENCRYPTED</small>`}</p>
+    <p class="inv-name">${known ? `${esc(e.n)} <small>${esc(e.s)}</small>` : `? ? ? <small>#${pad(e.no)} · undiscovered</small>`}</p>
     <div class="inv-art${rec ? '' : ' locked'}${intel ? ' intel' : ''}">
       <svg viewBox="0 0 100 100" aria-hidden="true">
         <g class="spin"><circle cx="50" cy="50" r="47" stroke-dasharray="3 5"/></g>
@@ -1058,7 +1087,7 @@ function renderInvDetail(e) {
       <div class="inv-stats">${game.STAT_KEYS.map((k) => `<div class="inv-stat"><b>${rec ? `+${st[k]}` : '??'}</b>${k}<i class="seg"><em style="width:${rec ? st[k] : 0}%"></em></i></div>`).join('')}</div>
     </div>
     <div class="inv-use">
-      <p>${rec ? `[tap] open card · pwr ${st.pwr}` : intel ? `[scan] find in ${esc(e.h.toLowerCase())}` : '[tap] view signal'}</p>
+      <p>${rec ? `PWR ${st.pwr}` : intel ? `Find it in ${esc(e.h.toLowerCase())}` : 'Not found yet'}</p>
       <button type="button" class="btn small primary" data-open="${e.k}">Open</button>
     </div>`;
 }
@@ -1111,7 +1140,7 @@ function renderArena() {
   $('#arena-sub').textContent = `W ${b.wins} · L ${b.losses}`;
   if (!battle.owned(s).length) {
     $('#arena').innerHTML = `<section class="card-box chamfer"><div class="box-head"><h3>No squad yet</h3></div>
-      <p class="about">Battles use the cards you've captured. Scan your first real animal, then come back to fight rivals with it.</p>
+      <p class="about">Catch your first card to unlock battles.</p>
       <button type="button" class="btn primary" data-goto-scan>Go scan</button></section>`;
     return;
   }
@@ -1141,19 +1170,18 @@ function renderArena() {
           <span class="sq-no">${i + 1}</span><img src="${artURL(e)}" alt="">
           <b>${esc(e.n)}</b><span class="fglyphs">${glyphs(k)}</span><small>LV ${lv} · PWR ${Math.round(battle.pwrOf(s, k))}</small></button>`;
       }).join('')}</div>
-      <div class="btn-row"><button type="button" class="btn small" data-auto-squad>Auto-pick strongest</button><span class="about">Slot 1 fights first.</span></div>
+      <div class="btn-row"><button type="button" class="btn small" data-auto-squad>Auto-pick</button><span class="about">Slot 1 fights first</span></div>
     </section>
 
     <section class="card-box chamfer">
-      <div class="box-head"><h3>Wild signals</h3><small>${sims.paid}/${battle.SIM_PAID} paid wins today</small></div>
-      <p class="about">Practice battles against random signals at your squad's level. Wins pay +${battle.SIM_REWARD.credits}◆ · +${battle.SIM_REWARD.xp} XP (${battle.SIM_PAID} a day), then XP only.</p>
+      <div class="box-head"><h3>Wild signals</h3><small>${sims.paid}/${battle.SIM_PAID} today</small></div>
+      <div class="reward-row"><span class="gain">+${battle.SIM_REWARD.credits}◆</span><span class="gain">+${battle.SIM_REWARD.xp} XP</span><span class="about">per win</span></div>
       <button type="button" class="btn wide" data-fight="wild">Find a battle</button>
     </section>
 
     <section class="card-box chamfer">
-      <div class="box-head"><h3>Type matchups</h3><small>×1.5 damage</small></div>
+      <div class="box-head"><h3>Type matchups</h3><button type="button" class="help-btn" data-help="types" aria-label="How type matchups work">?</button></div>
       <div class="typechart">${TYPE_IDS.map((t) => `<div style="--tc:${TYPES[t].color}">${glyph(t)}<b>${TYPES[t].name}</b><i>beats</i>${battle.STRONG[t].map((x) => `<span style="--tc:${TYPES[x].color}" title="${TYPES[x].name}">${glyph(x)}</span>`).join('')}</div>`).join('')}</div>
-      <p class="about" style="margin-top:10px">Hits against a type that beats yours are resisted (×0.67). Guard halves damage and charges <b>Overdrive</b>, a big hit with your best type. Holo cards get +10% HP, ATK and DEF.</p>
     </section>
 
     <section class="card-box chamfer">
@@ -1358,11 +1386,14 @@ function startBattle(kind) {
       <div class="gains">${reward.credits ? `<span class="gain hl">+${reward.credits}◆</span>` : ''}<span class="gain${won ? ' hl' : ''}">+${reward.xp} XP</span>
         ${kind === 'rival' && won && reward.credits ? '<span class="gain hl">rival defeated</span>' : ''}${!reward.credits && won ? `<span class="gain">${kind === 'rival' ? 'rival already beaten today' : 'daily paid wins used'}</span>` : ''}</div>
       ${xpBarHTML(xpBefore, s.xp)}
-      <p class="about">${won ? 'Level your cards by re-scanning the real animals — every level adds +3 to each stat.' : 'Tip: check the type matchups and put a counter in slot 1. Guard to build Overdrive.'}</p>
       <div class="actions">${more ? `<button type="button" class="btn" data-bt="again">${kind === 'rival' ? 'Try again' : 'Battle again'}</button>` : ''}<button type="button" class="btn primary" data-close>Done</button></div>
     </div>`);
     const res = $('.bt-result', root);
     if (won) { burst(res, 3); popGain(reward.credits ? `+${reward.credits}◆` : `+${reward.xp} XP`, res, { delay: 200 }); }
+    const lastFoe = battle.active(b.foe);
+    const counters = TYPE_IDS.filter((x) => battle.STRONG[x].includes(lastFoe.types[0])).map((x) => TYPES[x].name);
+    setTimeout(() => pipSay(won ? (kind === 'rival' && reward.credits ? 'We beat the rival! Same time tomorrow?' : 'Victory! Your squad is getting strong.')
+      : `Shake it off! Their ${esc(lastFoe.e.n)} is ${TYPES[lastFoe.types[0]].name} — try <b>${counters.join(', ').replace(/, ([^,]*)$/, ' or $1')}</b> cards.`, won ? 'happy' : 'sad'), 900);
     setTimeout(() => $('.xpbar', res)?.classList.add('go'), 250);
     res.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
   }
@@ -1394,7 +1425,7 @@ function renderOps() {
     </section>
 
     <section class="card-box chamfer">
-      <div class="box-head"><h3>Daily orders</h3><small>resets at midnight</small></div>
+      <div class="box-head"><h3>Daily orders</h3><small>resets daily</small></div>
       ${d.missions.map((m) => {
         const p = Math.min(m.goal, d.progress[m.id] || 0);
         const claimed = d.claimed[m.id];
@@ -1405,20 +1436,20 @@ function renderOps() {
           <div class="prog"><span style="width:${(p / m.goal) * 100}%"></span></div>
         </div>`;
       }).join('')}
-      <p class="allclear">${allClaimed ? 'All orders cleared today ✓' : `Clear all three for a +${game.ALL_CLEAR_BONUS}◆ bonus`}</p>
+      <p class="allclear">${allClaimed ? 'All clear ✓' : `All three: +${game.ALL_CLEAR_BONUS}◆ bonus`}</p>
     </section>
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Streak</h3><small>best ${s.streak?.best || 0} days</small></div>
       <div class="streak"><div class="big">${pad(streak, 2)}</div>
-        <div><p>Log a sighting every day to grow your streak. Each day pays <b>+5◆ × streak</b> (max 50).</p><div class="days">${weekDots}</div></div></div>
+        <div><p><b>+5◆ × streak</b> each day</p><div class="days">${weekDots}</div></div></div>
     </section>
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Affinities</h3><small>owned / total</small></div>
       <div class="typegrid">${TYPE_IDS.map((t) => {
         const total = ENTRIES.filter((e) => AFFINITY[e.k].includes(t)).length;
-        return `<div style="--tc:${TYPES[t].color}">${glyph(t)}<span><b>${TYPES[t].name}</b><small>${TYPES[t].desc}</small></span><em>${byType[t] || 0}<small style="display:inline">/${total}</small></em></div>`;
+        return `<div style="--tc:${TYPES[t].color}">${glyph(t)}<span><b>${TYPES[t].name}</b></span><em>${byType[t] || 0}<small style="display:inline">/${total}</small></em></div>`;
       }).join('')}</div>
     </section>
 
@@ -1429,7 +1460,7 @@ function renderOps() {
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Badges</h3><small>${list.filter((a) => a.done).length}/${list.length}</small></div>
-      <div class="achv">${list.map((a) => `<div class="${a.done ? 'done' : ''}"><div class="hex">${ACHV_ICON}</div><b>${a.name}</b>${a.desc}</div>`).join('')}</div>
+      <div class="achv">${list.map((a) => `<div class="${a.done ? 'done' : ''}" title="${esc(a.desc)}"><div class="hex">${ACHV_ICON}</div><b>${a.name}</b><span>${a.desc}</span></div>`).join('')}</div>
     </section>`;
 }
 $('#ops').addEventListener('click', (ev) => {
@@ -1508,21 +1539,20 @@ function renderProfile() {
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Config</h3></div>
-      <label class="toggle"><span>Voice<small>Narrate new cards aloud</small></span>
+      <label class="toggle"><span>Voice<small>Read new cards aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
-      <label class="toggle"><span>Sound FX<small>Scanner blips and reveal chimes</small></span>
+      <label class="toggle"><span>Sound FX</span>
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
-      <label class="toggle"><span>Haptics<small>Vibrate on captures, hits and rewards</small></span>
+      <label class="toggle"><span>Haptics</span>
         <input type="checkbox" class="switch" data-setting="haptics" ${s.settings.haptics !== false ? 'checked' : ''}></label>
-      <label class="toggle"><span>Card tilt<small>Cards follow your phone's motion</small></span>
+      <label class="toggle"><span>Card tilt</span>
         <input type="checkbox" class="switch" data-setting="tilt" ${s.settings.tilt ? 'checked' : ''}></label>
-      <label class="toggle"><span>Location tags<small>Save roughly where you found each animal (about 1 km, kept on this phone)</small></span>
+      <label class="toggle"><span>Location tags<small>Map your finds (~1 km, on this phone)</small></span>
         <input type="checkbox" class="switch" data-setting="location" ${s.settings.location ? 'checked' : ''}></label>
     </section>
 
     <section class="card-box chamfer compare">
-      <div class="box-head"><h3>Compare</h3><small>no server · no cards given</small></div>
-      <p class="about">Show a friend this code, or send your link. When they open it, their WildDex shows which cards you each have.</p>
+      <div class="box-head"><h3>Compare</h3><button type="button" class="help-btn" data-help="compare" aria-label="How compare works">?</button></div>
       <div class="qr" id="qr" aria-label="QR code with your collection link"></div>
       <div class="btn-row" style="justify-content:center">
         <button type="button" class="btn small primary" data-act="share">Share link</button>
@@ -1536,7 +1566,7 @@ function renderProfile() {
 
     <section class="card-box chamfer">
       <div class="box-head"><h3>Backup</h3></div>
-      <p class="about">Your binder lives only on this device. Export a backup to move it to a new phone.</p>
+      <p class="about">Saved on this phone only.</p>
       <div class="btn-row">
         <button type="button" class="btn small" data-act="export">Export</button>
         <label class="btn small">Import<input type="file" accept="application/json,.json" data-act="import" hidden></label>
@@ -1544,13 +1574,7 @@ function renderProfile() {
       </div>
     </section>
 
-    <section class="card-box chamfer about">
-      <div class="box-head"><h3>About</h3></div>
-      <p>Recognition runs entirely on your phone with a MobileNet v2 neural net — photos never leave your device, and scanning works offline once loaded.</p>
-      <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Each scan checks for real depth that moves with your hand (parallax), so photos, prints, screens and videos are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
-      <p>Card stats are game values. 3D animal art: Microsoft Fluent Emoji (MIT). QR codes: qrcode-generator (MIT).</p>
-      <p><button type="button" class="link" data-act="intro">How to play</button></p>
-    </section>`;
+    <p class="center-row"><button type="button" class="btn small" data-help="intro">How to play</button> <button type="button" class="btn small" data-help="about">About</button></p>`;
 }
 $('#profile').addEventListener('input', (ev) => {
   if (ev.target.id === 'collector-name') { state().name = ev.target.value.trim(); store.save(); }
@@ -1639,9 +1663,9 @@ function supplyHTML() {
   const l = loot.locker(s);
   const canBuy = (s.shards || 0) >= loot.CRATE_COST;
   return `<section class="card-box chamfer supply">
-    <div class="box-head"><h3>Supply</h3><small>${l.opened} opened</small></div>
+    <div class="box-head"><h3>Supply</h3><button type="button" class="help-btn" data-help="supply" aria-label="About supply crates">?</button></div>
     <div class="crate-row"><div class="crate mini">${CRATE_SVG}${l.crates ? `<i class="crate-count">${l.crates}</i>` : ''}</div>
-      <p class="about">Supply crates hold <b>card frames</b> and <b>operator titles</b>. You earn one every level-up, or buy one with credits. No animals inside — those you scan for real.</p></div>
+      <p class="about"><b>Card frames</b> & <b>titles</b>. One free every level-up.</p></div>
     <div class="btn-row">
       ${l.crates ? `<button type="button" class="btn small primary" data-crate="free">Open crate (${l.crates})</button>` : ''}
       <button type="button" class="btn small${!l.crates && canBuy ? ' primary' : ''}" data-crate="buy" ${canBuy ? '' : 'disabled'}>Buy · ${loot.CRATE_COST}◆</button>
@@ -1708,7 +1732,7 @@ function crateFlow(free) {
     r.innerHTML = `<p class="loot-tier" style="color:${tier.color}">${tier.name} ${res.kind}</p>
       <p class="loot-name">${esc(res.name)}</p>
       ${preview}
-      ${res.dupe ? `<p class="about center">Already in your locker — refunded <b>+${loot.DUPE_REFUND}◆</b>.</p>` : `<p class="about center">${res.kind === 'frame' ? esc(res.desc) : 'Shown on your ID and in the header.'}</p>`}
+      ${res.dupe ? `<p class="about center">Already in your locker — refunded <b>+${loot.DUPE_REFUND}◆</b>.</p>` : `<p class="about center">${res.kind === 'frame' ? esc(res.desc) : 'Shown on your operator ID.'}</p>`}
       <div class="actions">
         ${!res.dupe ? '<button type="button" class="btn primary" data-equip>Equip</button>' : ''}
         ${loot.locker(s2).crates || (s2.shards || 0) >= loot.CRATE_COST ? `<button type="button" class="btn" data-again>Open another${loot.locker(s2).crates ? '' : ` · ${loot.CRATE_COST}◆`}</button>` : ''}
@@ -1716,6 +1740,7 @@ function crateFlow(free) {
       </div>`;
     r.hidden = false;
     if (res.dupe) popGain(`+${loot.DUPE_REFUND}◆`, r, { delay: 300 });
+    else if (res.r >= 3) setTimeout(() => pipSay(res.r === 4 ? 'A <b>Legendary</b> drop! Show that off.' : `Ooh, an <b>Epic</b> ${res.kind}!`, 'wow'), 900);
     refreshAll(true);
   };
   crate.addEventListener('click', tap);
@@ -1768,8 +1793,8 @@ function fieldMapHTML() {
   const pts = tagged();
   if (!pts.length) {
     return `<p class="about">${state().settings.location
-      ? 'No tagged captures yet. Your next scans will appear here.'
-      : 'Turn on <b>Location tags</b> in ID → Config to plot where you find animals. Positions are rounded to about 1 km and stay on this phone.'}</p>
+      ? 'Your next finds will appear here.'
+      : 'Turn on <b>Location tags</b> to map your finds.'}</p>
       ${state().settings.location ? '' : '<button type="button" class="btn small" data-goto-id>Open config</button>'}`;
   }
   const lats = pts.map((p) => p.loc[0]);
@@ -1809,7 +1834,7 @@ function fieldMapHTML() {
       ${marks}
       <text class="scale" x="8" y="${H - 8}">≈ ${kmAcross < 1 ? '<1' : kmAcross} km across · ${spots.size} spot${spots.size === 1 ? '' : 's'}</text>
     </svg>
-    <p class="about" style="margin-top:8px">Tap a marker to open the card. Rounded to ~1 km · stored only on this phone · never included in compare codes.</p>`;
+    <p class="about" style="margin-top:8px">Tap a marker · ~1 km · stays on this phone</p>`;
 }
 
 // ---------------------------------------------------------------- compare with friends
@@ -1896,15 +1921,145 @@ document.addEventListener('click', (ev) => {
   if (c) openEntry(c.dataset.key);
 });
 
+// ---------------------------------------------------------------- home hub
+const ICON = {
+  rival: '<svg viewBox="0 0 24 24"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg>',
+  orders: '<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L13 9M9 16h6"/></svg>',
+  crate: '<svg viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5v9L12 22l-9-4.5Z"/><path d="M3 8.5 12 13l9-4.5M12 13v9"/></svg>',
+  streak: '<svg viewBox="0 0 24 24"><path d="M12 22c4.4 0 7-2.9 7-6.6 0-4.2-3.6-6.6-4.6-10.9-2 1.6-3 3.6-3 5.8-1-.8-1.6-1.9-1.9-3.3C7.4 9 5 11.6 5 15.4 5 19.1 7.6 22 12 22Z"/><path d="M12 22c-1.8 0-3-1.3-3-3 0-2 1.6-3 3-5 1.4 2 3 3 3 5 0 1.7-1.2 3-3 3Z"/></svg>',
+  event: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m12 12.5.9 1.9 2.1.3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.4 2.1-.3Z"/></svg>',
+  cards: '<svg viewBox="0 0 24 24"><rect x="7" y="3" width="13" height="17" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10"/></svg>',
+  scan: '<svg viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><circle cx="12" cy="12" r="3.5"/></svg>',
+};
+
+// An uncaught easy animal to tease, fixed for the day.
+function dailyTarget() {
+  const pool = ENTRIES.filter((e) => e.r <= 2 && !state().caught[e.k]);
+  return pool.length ? pool[game.hash(`target:${game.today()}`) % pool.length] : null;
+}
+
+function pipLines() {
+  const s = state();
+  const n = caughtKeys().length;
+  const name = esc(s.name || 'partner');
+  const lines = [];
+  if (!n) lines.push([`Hi ${name}! I'm <b>Pip</b>, your field drone. Point the camera at a real animal and we'll catch our first card!`, 'happy']);
+  if (s.locker?.crates) lines.push([`You've got <b>${s.locker.crates} supply crate${s.locker.crates > 1 ? 's' : ''}</b> waiting. Let's crack one open!`, 'wow']);
+  if (unclaimedMissions()) lines.push(['Orders complete! Your rewards are waiting in <b>Ops</b>.', 'happy']);
+  if (n) {
+    const r = battle.dailyRival(s);
+    if (!r.won) {
+      const lead = BY_KEY[r.keys[0]];
+      const t = AFFINITY[lead.k][0];
+      const counters = TYPE_IDS.filter((x) => battle.STRONG[x].includes(t)).map((x) => TYPES[x].name);
+      lines.push([`<b>${esc(r.name)}</b> leads with a ${esc(lead.n)} (${TYPES[t].name}). <b>${counters.join(', ').replace(/, ([^,]*)$/, ' or $1')}</b> cards hit it hard!`, 'idle']);
+    }
+  }
+  const streak = game.liveStreak(s);
+  if (streak && s.streak.last !== game.today()) lines.push([`Your <b>${streak}-day streak</b> ends at midnight. One sighting keeps it alive!`, 'sad']);
+  const target = dailyTarget();
+  if (target) lines.push([`Signal detected… a <b>${TYPES[AFFINITY[target.k][0]].name}-type</b> animal lives in ${esc(target.h.toLowerCase())}. Can you find it?`, 'wow']);
+  lines.push(['Tip: a smooth left-right sweep earns an <b>S grade</b> and doubles your holo odds!', 'happy']);
+  return lines;
+}
+
+let pipIdx = 0;
+function renderHome() {
+  const s = state();
+  const keys = caughtKeys();
+  const n = keys.length;
+  const lines = pipLines();
+  const [text, mood] = lines[pipIdx % lines.length];
+  const recent = keys.slice().sort((a, b) => s.caught[b].last - s.caught[a].last)[0];
+  const d = game.dailyState(s);
+  const done = d.missions.filter((m) => (d.progress[m.id] || 0) >= m.goal).length;
+  const ready = unclaimedMissions();
+  const r = n ? battle.dailyRival(s) : null;
+  const ev = game.weeklyEvent(s);
+  const evP = Math.min(ev.goal, ev.progress);
+  const streak = game.liveStreak(s);
+  const crates = s.locker?.crates || 0;
+  const holos = keys.filter((k) => s.caught[k].holo).length;
+  const sectors = SETS.filter((x) => x.entries.every((e) => s.caught[e.k])).length;
+  const tile = ({ tab, goto, act, icon, label, value, sub, hot, tc, bar }) => `<button type="button" class="tile${hot ? ' hot' : ''}${bar != null ? ' wide' : ''}"
+      ${tab ? `data-tab="${tab}"` : ''} ${goto ? `data-goto="${goto}"` : ''} ${act ? `data-home="${act}"` : ''} style="--tc:${tc}">
+      <span class="t-icon">${icon}</span><span class="t-label">${label}</span><b class="t-value">${value}</b>
+      ${bar != null ? `<i class="t-bar"><em style="width:${Math.max(2, bar * 100)}%"></em></i>` : ''}<small class="t-sub">${sub}</small></button>`;
+  $('#home').innerHTML = `
+    <div class="home-top"><span class="dot-text home-logo"><span class="sr">WildDex</span>${dotSVG('WILDDEX')}</span>
+      <button type="button" class="help-btn" data-help="intro" aria-label="How to play">?</button></div>
+    <section class="hero">
+      <div class="hero-card">${recent ? cardHTML(BY_KEY[recent]) : '<div class="card ghost"><b>?</b><small>your first card</small></div>'}</div>
+      <div class="hero-pip" role="button" tabindex="0" aria-label="Talk to Pip">${pipSVG(mood)}<p class="bubble" aria-live="polite">${text}</p></div>
+    </section>
+    <button type="button" class="scan-cta" data-tab="scan" data-autostart>${ICON.scan}<span>Scan an animal</span></button>
+    <div class="tiles">
+      ${tile(r ? { tab: 'arena', icon: ICON.rival, label: 'Rival', value: esc(r.name), sub: r.won ? 'Defeated ✓' : `Win +${battle.RIVAL_REWARD.credits}◆`, hot: !r.won, tc: '#F09A8C' }
+        : { tab: 'arena', icon: ICON.rival, label: 'Arena', value: 'Locked', sub: 'Catch a card first', tc: '#F09A8C' })}
+      ${tile({ tab: 'ops', icon: ICON.orders, label: 'Orders', value: `${done}/${d.missions.length}`, sub: ready ? `${ready} reward${ready > 1 ? 's' : ''} ready!` : 'Daily missions', hot: ready > 0, tc: 'var(--accent-hi)' })}
+      ${tile(crates ? { act: 'crate', icon: ICON.crate, label: 'Crates', value: crates, sub: 'Tap to open!', hot: true, tc: 'var(--gold)' }
+        : { tab: 'id', goto: 'supply', icon: ICON.crate, label: 'Crates', value: 0, sub: `${loot.CRATE_COST}◆ each`, tc: 'var(--gold)' })}
+      ${tile({ tab: 'ops', icon: ICON.streak, label: 'Streak', value: `${streak}<small>d</small>`, sub: `best ${s.streak?.best || 0}`, hot: streak > 0 && s.streak.last !== game.today(), tc: '#F0A05B' })}
+      ${tile({ tab: 'ops', icon: ICON.event, label: esc(ev.name), value: `${evP}/${ev.goal}`, bar: evP / ev.goal, sub: ev.claimed ? 'Complete ✓' : `${ev.daysLeft}d left`, hot: evP >= ev.goal && !ev.claimed, tc: ev.type ? TYPES[ev.type].color : 'var(--accent-hi)' })}
+      ${tile({ tab: 'binder', icon: ICON.cards, label: 'Collection', value: `${n}<small>/${ENTRIES.length}</small>`, bar: n / ENTRIES.length, sub: `${holos} holo · ${sectors} sectors`, tc: '#9ED8CF' })}
+    </div>`;
+}
+$('#home').addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-home="crate"]')) { sfx.click(); crateFlow(true); return; }
+  const pip = ev.target.closest('.hero-pip');
+  if (pip) {
+    pipIdx++;
+    const lines = pipLines();
+    const [text, mood] = lines[pipIdx % lines.length];
+    pip.innerHTML = `${pipSVG(mood)}<p class="bubble" aria-live="polite">${text}</p>`;
+    pip.classList.remove('boop'); void pip.offsetWidth; pip.classList.add('boop');
+    tone(1760, 0, 0.04, 'sine', 0.03); tone(2349, 0.06, 0.07, 'sine', 0.03);
+    buzz(10);
+  }
+});
+$('#home').addEventListener('keydown', (ev) => {
+  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.closest('.hero-pip')) { ev.preventDefault(); ev.target.closest('.hero-pip').click(); }
+});
+
+// ---------------------------------------------------------------- help (the "?" buttons)
+const HELP = {
+  scan: ['How scanning works', `<ol class="intro-steps">
+    <li><div><b>Aim</b><span>Point at one real, live animal — close and well lit.</span></div></li>
+    <li><div><b>Sweep</b><span>Tap scan and slide your phone left, then right. Keep the animal in the ring.</span></div></li>
+    <li><div><b>Grade</b><span>A steady sweep earns S, A, B or C — better grades pay more ◆ and XP. S doubles holo odds.</span></div></li>
+    <li><div><b>Real only</b><span>Photos, prints, screens and videos are rejected: the sweep checks for real 3D depth.</span></div></li></ol>`],
+  types: ['Type matchups', `<p class="fact">Each type beats two others for <b>×1.5</b> damage. Hitting a type that beats yours is resisted (<b>×0.67</b>).</p>
+    <p class="fact"><b>Guard</b> takes less damage and charges <b>Overdrive</b> — a big hit with your best type. Holo cards get +10% HP, ATK and DEF.</p>`],
+  supply: ['Supply crates', `<p class="fact">Crates hold <b>card frames</b> and <b>operator titles</b>. You get one every level-up, or buy one for ${loot.CRATE_COST}◆. Duplicates refund ${loot.DUPE_REFUND}◆.</p>
+    <p class="fact">No animals inside — those you scan for real.</p>`],
+  compare: ['Compare', '<p class="fact">Show a friend your QR code or send your link. Their WildDex shows which cards you each have. No server, and comparing never gives cards.</p>'],
+  about: ['About WildDex', `<p class="fact">Recognition runs on your phone (MobileNet v2) — photos never leave your device, and scanning works offline once loaded.</p>
+    <p class="fact">${ENTRIES.length} cards · ${SETS.length} sectors · ${TYPE_IDS.length} types. Pigeons, crows, deer and giraffes aren't in the scanner's vocabulary yet.</p>
+    <p class="fact">3D animal art: Microsoft Fluent Emoji (MIT). QR codes: qrcode-generator (MIT). Fonts: Russo One, JetBrains Mono (OFL).</p>`],
+};
+document.addEventListener('click', (ev) => {
+  const h = ev.target.closest('[data-help]');
+  if (!h) return;
+  sfx.click();
+  if (h.dataset.help === 'intro') { showIntro(); return; }
+  const [t, html] = HELP[h.dataset.help];
+  openSheet(`<div class="detail-head"><p class="eyebrow">Help</p><h2 data-decode>${t}</h2></div>${html}
+    <div class="actions"><button type="button" class="btn primary" data-close>Got it</button></div>`);
+});
+
 // ---------------------------------------------------------------- tabs
 function showTab(tab) {
   const changed = tab !== currentTab;
   currentTab = tab;
-  $$('.tabs button').forEach((b) => {
+  $$('.tabbar [data-tab]').forEach((b) => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== tab; });
+  $$('.view').forEach((v) => {
+    v.hidden = v.dataset.view !== tab;
+    if (!v.hidden && changed) { v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
+  });
+  if (tab === 'home') renderHome();
   if (tab === 'scan') { if (wantCamera && !stream) startCamera(); } else stopCamera();
   if (tab === 'binder') renderBinder();
   if (tab === 'arena') renderArena();
@@ -1913,9 +2068,15 @@ function showTab(tab) {
   if (changed) window.scrollTo({ top: 0 });
   try { sessionStorage.setItem('wilddex.tab', tab); } catch { /* ignore */ }
 }
-$('.tabs').addEventListener('click', (ev) => {
-  const b = ev.target.closest('button[data-tab]');
-  if (b) { sfx.click(); showTab(b.dataset.tab); }
+// Anything with data-tab navigates: the tab bar, header chips and home tiles.
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-tab]');
+  if (!b || b.closest('#sheet')) return;
+  sfx.click();
+  buzz(8);
+  showTab(b.dataset.tab);
+  if (b.dataset.goto) setTimeout(() => $(`.${b.dataset.goto}`)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }), 80);
+  if (b.hasAttribute('data-autostart') && !stream) startCamera();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopCamera();
@@ -2017,11 +2178,11 @@ function handleCompareLink() {
 
 async function boot() {
   drawWaves();
-  $$('.brand, .screen-title').forEach(renderDots);
+  $$('.screen-title').forEach(renderDots);
   startTwinkle();
-  let tab = 'scan';
-  try { tab = sessionStorage.getItem('wilddex.tab') || 'scan'; } catch { /* ignore */ }
-  if (!['scan', 'binder', 'arena', 'ops', 'id'].includes(tab)) tab = 'scan';
+  let tab = 'home';
+  try { tab = sessionStorage.getItem('wilddex.tab') || 'home'; } catch { /* ignore */ }
+  if (!['home', 'scan', 'binder', 'arena', 'ops', 'id'].includes(tab)) tab = 'home';
   refreshAll();
   log('wilddex_os · on-device mode', 'cmd');
   idle();
