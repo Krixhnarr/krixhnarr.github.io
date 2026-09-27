@@ -1,9 +1,10 @@
 import { SETS, ENTRIES, BY_KEY, RARITY } from './dex-data.js';
 import { LABELS } from './labels.js';
 import * as store from './store.js';
-import { loadModel, classify, interpret, isReady } from './classifier.js';
+import { loadModel, classify, interpret, isReady, spoofCheck } from './classifier.js';
 import { TYPES, TYPE_IDS, AFFINITY, glyph } from './affinity.js';
 import * as game from './game.js';
+import { detectFrame } from './liveness.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -334,6 +335,12 @@ const video = $('#video');
 const freeze = $('#freeze');
 const vf = $('#viewfinder');
 const freezeCtx = freeze.getContext('2d', { willReadFrequently: true });
+// Whole camera frame, letterboxed — used only for the screen/print check.
+const wide = document.createElement('canvas');
+wide.width = wide.height = 448;
+const wideCtx = wide.getContext('2d', { willReadFrequently: true });
+// Uncropped camera frame (downscaled) for the bezel / print-margin detector.
+const raw = document.createElement('canvas');
 let stream = null;
 let facing = 'environment';
 let wantCamera = false;
@@ -394,6 +401,18 @@ function captureFrame() {
   if (vf.classList.contains('mirror')) { freezeCtx.translate(freeze.width, 0); freezeCtx.scale(-1, 1); }
   freezeCtx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, freeze.width, freeze.height);
   freezeCtx.restore();
+
+  const scale = wide.width / Math.max(vw, vh);
+  const dw = vw * scale;
+  const dh = vh * scale;
+  wideCtx.fillStyle = '#000';
+  wideCtx.fillRect(0, 0, wide.width, wide.height);
+  wideCtx.drawImage(video, (wide.width - dw) / 2, (wide.height - dh) / 2, dw, dh);
+
+  const rs = Math.min(1, 640 / Math.max(vw, vh));
+  raw.width = Math.round(vw * rs);
+  raw.height = Math.round(vh * rs);
+  raw.getContext('2d').drawImage(video, 0, 0, raw.width, raw.height);
 }
 
 const canvasToBlob = (canvas, size = 360) => new Promise((resolve) => {
@@ -446,7 +465,10 @@ async function runScan(source) {
     await warmModel();
     log('[..] inference ×3 (full · mirror · crop)');
     const probs = await classify(freeze);
-    const v = interpret(probs);
+    log('[..] liveness check · screen/print scan');
+    const spoof = spoofCheck(probs, await classify(wide));
+    const frame = detectFrame(raw, raw.width, raw.height);
+    const v = spoof.blocked || frame.found ? { kind: 'spoof', spoof, frame } : interpret(probs);
     const wait = 1200 - (performance.now() - started);
     if (wait > 0) await sleep(wait);
     vf.classList.remove('scanning');
@@ -469,6 +491,14 @@ async function handleVerdict(v) {
   if (v.kind === 'match') {
     log(`[ok] match <b>${snake(v.top.entry.s)}</b> · conf=${conf(v.top.score)}`, 'ok');
     await register(v.top.entry, v.top.form, v.alternatives.filter((a) => a.entry !== v.top.entry));
+  } else if (v.kind === 'spoof') {
+    sfx.fail();
+    log(v.spoof.blocked
+      ? `[err] liveness failed · <b>${esc(snake(LABELS[v.spoof.label]))}</b> · conf=${conf(v.spoof.score)}`
+      : `[err] liveness failed · <b>display_or_print_frame</b> detected`, 'err');
+    log('[err] screens & prints can\'t be registered', 'err');
+    toast('SCREEN OR PRINT DETECTED · SCAN A REAL ANIMAL');
+    setTimeout(resetScanner, 2200);
   } else if (v.kind === 'unsure') {
     sfx.again();
     log(`[warn] low confidence · top=${conf(v.top.score)} · manual id`, 'warn');
@@ -829,7 +859,7 @@ function renderProfile() {
     <section class="card-box about">
       <div class="box-head"><h3>About</h3></div>
       <p>Recognition runs entirely on your phone with a MobileNet v2 neural net — photos never leave your device, and scanning works offline once loaded.</p>
-      <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
+      <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Photos shown on screens or paper are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
       <p>Card stats are game values. 3D animal art: Microsoft Fluent Emoji (MIT).</p>
       <p><button type="button" class="link" data-act="intro">How to play</button></p>
     </section>`;

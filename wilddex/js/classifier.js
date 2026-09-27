@@ -67,6 +67,27 @@ export async function classify(canvas) {
   return data;
 }
 
+// Screens and printed pictures: ImageNet classes the net reports when a
+// "live" scan is really a phone, monitor, TV, laptop, book or magazine page.
+export const SPOOF_CLASSES = [
+  782, 664, 851, 620, 681, 487, 605, 590, 527, 916, 548, 598, 781, // screens & devices
+  921, 917, 922, 611, 918, 692, // book jackets, comics, menus, puzzles, packets
+];
+const spoofMass = (p) => SPOOF_CLASSES.reduce((sum, i) => sum + p[i], 0);
+const topSpoof = (p) => SPOOF_CLASSES.reduce((best, i) => (p[i] > p[best] ? i : best), SPOOF_CLASSES[0]);
+
+// `centre` is the probabilities for the square the player aimed at; `wide`
+// is the whole camera frame zoomed out, where a phone's bezel, a monitor's
+// edge or a page border usually shows up even when the animal fills the
+// centre.
+export function spoofCheck(centre, wide) {
+  const c = spoofMass(centre);
+  const w = spoofMass(wide);
+  const blocked = c >= 0.12 || w >= 0.2 || wide[topSpoof(wide)] >= 0.15;
+  const p = w >= c ? wide : centre;
+  return { blocked, score: Math.max(c, w), label: topSpoof(p) };
+}
+
 // Turns raw probabilities into a WildDex verdict.
 export function interpret(p) {
   let animal = 0;
