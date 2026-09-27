@@ -22,8 +22,13 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   with several classes (dog breeds, cat types, crabs…) record each as a
   "form".
 - **Cards**: 3D animal art from Microsoft Fluent Emoji (`art/`, MIT), 13
-  affinity types with HUD glyphs (`js/affinity.js`), game stats, levels,
+  colour-coded affinity types with HUD glyphs, rarity frames (Legendary = gold),
+  gyroscope card tilt (`js/affinity.js`), game stats, levels,
   missions and streaks (`js/game.js`).
+- **Social & world**: compare collections with friends via a QR code / link
+  (`#c=` bitset of owned cards — no server, never grants cards); opt-in
+  location tags (rounded to ~1 km, on-device) with a self-drawn field map;
+  rotating weekly events.
 - **Storage**: progress in `localStorage`, capture photos in IndexedDB, with
   backup/restore on the ID screen.
 - **Look**: game-inventory HUD — charcoal panels, lavender accent, wide

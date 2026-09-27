@@ -1,9 +1,6 @@
 // Affinity types — WildDex's answer to Pokémon types. Every animal has one
-// or two, shown as HUD-style glyphs. Colours stay inside the app palette
-// (keys are historical names: coral = lavender accent, blush = light lavender).
-
-// Lavender / charcoal palette from the inventory reference.
-const C = { coral: '#9B7CD8', blush: '#CDBDF0', mint: '#E6E6EB', sage: '#A6A6B0', ash: '#7E7E88' };
+// or two, shown as HUD-style glyphs. Each type has its own muted colour so
+// the inventory reads at a glance on the charcoal UI.
 
 // Wedge of a ring, for the trefoil glyphs.
 function wedge(cx, cy, r1, r2, a0, a1) {
@@ -13,31 +10,31 @@ function wedge(cx, cy, r1, r2, a0, a1) {
 const trefoil = [-90, 30, 150].map((a) => wedge(12, 12, 3.2, 9.5, a - 30, a + 30)).join(' ');
 
 export const TYPES = {
-  terra: { name: 'Terra', color: C.sage, desc: 'Ground dwellers & grazers',
+  terra: { name: 'Terra', color: '#CDA66F', desc: 'Ground dwellers & grazers',
     svg: '<path d="M3 19.5 12 4l9 15.5Z"/><path d="m7.8 19.5 4.2-7.3 4.2 7.3"/>' },
-  aqua: { name: 'Aqua', color: C.mint, desc: 'Creatures of water',
+  aqua: { name: 'Aqua', color: '#5FB6DA', desc: 'Creatures of water',
     svg: '<path d="M12 3s-6.5 7.4-6.5 11.6a6.5 6.5 0 0 0 13 0C18.5 10.4 12 3 12 3Z"/><path d="M9 15.2a3 3 0 0 0 3 3"/>' },
-  aero: { name: 'Aero', color: C.mint, desc: 'Masters of the sky',
+  aero: { name: 'Aero', color: '#9ED8CF', desc: 'Masters of the sky',
     svg: '<path d="m4 13 8-8 8 8"/><path d="m4 20 8-8 8 8"/>' },
-  feral: { name: 'Feral', color: C.coral, desc: 'Apex hunters',
+  feral: { name: 'Feral', color: '#E27D6D', desc: 'Apex hunters',
     svg: '<path d="M5 20C7 14 9 8 12 3"/><path d="M10 21c2-5 4-10 7-14"/><path d="M15 21c1.5-3 3-6 5-8.5"/>' },
-  toxin: { name: 'Toxin', color: C.coral, desc: 'Venom, poison & stink',
+  toxin: { name: 'Toxin', color: '#A9D46A', desc: 'Venom, poison & stink',
     svg: '<circle cx="12" cy="7.2" r="4.3"/><circle cx="7.8" cy="14.6" r="4.3"/><circle cx="16.2" cy="14.6" r="4.3"/><circle cx="12" cy="12.2" r="1.6" class="fill"/>' },
-  swarm: { name: 'Swarm', color: C.blush, desc: 'Insects & arthropods',
+  swarm: { name: 'Swarm', color: '#E8C45E', desc: 'Insects & arthropods',
     svg: '<path d="m8 3.5 3.5 2v4L8 11.5l-3.5-2v-4Z"/><path d="m16 3.5 3.5 2v4L16 11.5l-3.5-2v-4Z"/><path d="m12 12 3.5 2v4L12 20l-3.5-2v-4Z"/>' },
-  frost: { name: 'Frost', color: C.mint, desc: 'Built for the cold',
+  frost: { name: 'Frost', color: '#BDD9F4', desc: 'Built for the cold',
     svg: '<path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7"/><path d="m9.5 3.8 2.5 2.4 2.5-2.4M9.5 20.2l2.5-2.4 2.5 2.4"/>' },
-  solar: { name: 'Solar', color: C.blush, desc: 'Heat, sun & fire',
+  solar: { name: 'Solar', color: '#F0A05B', desc: 'Heat, sun & fire',
     svg: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>' },
-  umbra: { name: 'Umbra', color: C.ash, desc: 'Night stalkers',
+  umbra: { name: 'Umbra', color: '#9197C4', desc: 'Night stalkers',
     svg: '<path d="M15.5 3.2A9 9 0 1 0 20.8 16 7.2 7.2 0 0 1 15.5 3.2Z"/><path d="M19 4.5v3M17.5 6h3"/>' },
-  psi: { name: 'Psi', color: C.blush, desc: 'Big brains & clever minds',
+  psi: { name: 'Psi', color: '#D98DDB', desc: 'Big brains & clever minds',
     svg: '<path d="M2 12c3.8-6.5 16.2-6.5 20 0-3.8 6.5-16.2 6.5-20 0Z"/><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="1" class="fill"/>' },
-  verdant: { name: 'Verdant', color: C.sage, desc: 'Forest & leaf dwellers',
+  verdant: { name: 'Verdant', color: '#71C189', desc: 'Forest & leaf dwellers',
     svg: '<path d="M4.5 19.5C4.5 10 10.5 4.5 20 4.5c0 9.5-5.5 15-15.5 15Z"/><path d="M4.5 19.5 14 10"/>' },
-  volt: { name: 'Volt', color: C.coral, desc: 'Speed & electric senses',
+  volt: { name: 'Volt', color: '#F1E06E', desc: 'Speed & electric senses',
     svg: '<path d="M13.5 2 5 13.5h6.2L10 22l9-12h-6.2Z"/>' },
-  ancient: { name: 'Ancient', color: C.blush, desc: 'Living fossils & relics',
+  ancient: { name: 'Ancient', color: '#CDBBA2', desc: 'Living fossils & relics',
     svg: `<circle cx="12" cy="12" r="10.5"/><path class="fill" d="${trefoil}"/><circle cx="12" cy="12" r="1.8" class="fill"/>` },
 };
 
