@@ -8,6 +8,9 @@ streak, and spend data shards to decrypt intel on cards you haven't found.
 Live at https://krixhnarr.github.io/wilddex/ — installable as an app
 (Add to Home Screen) and works offline after the first scan.
 
+- **Liveness**: scans of phones, monitors, laptops, TVs and printed photos are
+  rejected — the net checks the wider frame for devices/print, and
+  `js/liveness.js` looks for a bezel or print-margin ring around the animal.
 - **Recognition** runs on-device with MobileNet v2 (`model/`) via
   TensorFlow.js (`vendor/tf.min.js`). Nothing is uploaded.
 - **Collection**: 261 animal cards across 20 sectors (`js/dex-data.js`). Every
