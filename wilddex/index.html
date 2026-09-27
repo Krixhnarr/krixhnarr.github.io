@@ -5,58 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WildDex</title>
   <meta name="description" content="Scan real animals and collect them as cards — a field-scanner collectible game.">
-  <meta name="theme-color" content="#242427">
+  <meta name="theme-color" content="#1F1C27">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="preload" href="fonts/michroma-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/russo-one-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
   <div class="app">
     <header class="topbar">
-      <div class="hud-head">
-        <div class="brandblock">
-          <p class="brand">WILDDEX</p>
-          <p class="sys" id="sys-line">// SYS: FIELD_LINK_V2.6 <i>|</i> SECTOR 07</p>
-        </div>
-        <div class="lvl" role="img" aria-label="Operator level">
-          <svg viewBox="0 0 64 64" aria-hidden="true">
-            <circle class="lvl-track" cx="32" cy="32" r="27"/>
-            <circle class="lvl-arc" id="lvl-arc" cx="32" cy="32" r="27"/>
-            <circle class="lvl-inner" cx="32" cy="32" r="21"/>
-            <path class="lvl-ticks" d="M32 1v4M32 59v4M1 32h4M59 32h4"/>
-          </svg>
-          <b id="op-level">1</b>
-          <small>level</small>
-        </div>
-        <div class="meters" id="meters">
-          <div class="meter-row"><span>credits <b id="shards">0</b> ◆</span><i class="seg"><em id="shards-bar"></em></i></div>
-          <div class="meter-row"><i class="seg"><em id="cards-bar"></em></i><span>cards <b id="count-num">0</b> / <b id="count-total">0</b></span></div>
-        </div>
-      </div>
-      <nav class="tabs" aria-label="Sections">
-        <button type="button" data-tab="scan" aria-current="page">scan</button>
-        <button type="button" data-tab="binder">cards</button>
-        <button type="button" data-tab="arena">arena<i class="badge" id="arena-badge" hidden></i></button>
-        <button type="button" data-tab="ops">ops<i class="badge" id="ops-badge" hidden></i></button>
-        <button type="button" data-tab="id">id<i class="badge" id="id-badge" hidden></i></button>
-      </nav>
-      <div class="deco-line" aria-hidden="true">
-        <svg viewBox="0 0 400 14" preserveAspectRatio="none"><path d="M0 2H150L162 12H400"/></svg>
-        <div class="wave" data-bars="30"></div>
+      <button type="button" class="op-chip" data-tab="id" aria-label="Operator profile">
+        <span class="op-hex"><b id="op-level">1</b></span>
+        <span class="op-meta"><b id="op-name">Operator</b><span class="op-xp" aria-hidden="true"><em id="op-xp-bar"></em></span></span>
+        <i class="badge" id="id-badge" hidden></i>
+      </button>
+      <div class="pills">
+        <button type="button" class="pill crates" data-tab="id" data-goto="supply" aria-label="Supply crates">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5 12 4l9 4.5v9L12 22l-9-4.5Z"/><path d="M3 8.5 12 13l9-4.5M12 13v9"/></svg><b id="crates">0</b>
+        </button>
+        <span class="pill credits" id="meters" role="img" aria-label="Credits">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 9l-9 13L3 9Z"/><path d="M3 9h18M9 9l3 13 3-13M8 2.8 9 9l3-7 3 7 1-6.2"/></svg><b id="shards">0</b>
+        </span>
       </div>
     </header>
 
     <main>
+      <!-- HOME -->
+      <section class="view" data-view="home">
+        <div id="home"></div>
+      </section>
+
       <!-- SCAN -->
-      <section class="view" data-view="scan">
+      <section class="view" data-view="scan" hidden>
         <div class="screen-head">
-          <div><h1 class="screen-title">Scanner</h1><p class="sys">// OPTICAL_ID_UNIT <i>|</i> LIVE_MODE</p></div>
-          <div class="wave" data-bars="22"></div>
+          <div><h1 class="screen-title">Scan</h1></div>
+          <button type="button" class="help-btn" data-help="scan" aria-label="How scanning works">?</button>
         </div>
 
         <div class="viewfinder" id="viewfinder">
@@ -76,9 +64,7 @@
             <path class="brackets" d="M4 14V4h10M86 4h10v10M96 86v10H86M14 96H4V86" />
           </svg>
           <div class="readout tl"><span id="rec">○ STBY</span></div>
-          <div class="readout tr">AF·AE</div>
           <div class="readout bl" id="lens">LENS:REAR</div>
-          <div class="readout br">NET:LOCAL</div>
           <div class="sweep" aria-hidden="true"></div>
           <div class="lockon" id="lockon" aria-hidden="true">
             <svg viewBox="0 0 100 100">
@@ -95,14 +81,13 @@
             <i class="bar"><span id="sweep-bar"></span></i>
           </div>
           <div class="vf-overlay" id="vf-overlay">
-            <p class="vf-title">Scanner offline</p>
-            <p class="vf-text" id="vf-text">Power up the optics and point them at a real animal.</p>
-            <button type="button" class="btn primary" id="btn-camera">Power up camera</button>
+            <p class="vf-title">Camera off</p>
+            <p class="vf-text" id="vf-text">Point it at a real, live animal.</p>
+            <button type="button" class="btn primary big" id="btn-camera">Turn on camera</button>
           </div>
         </div>
 
         <div class="term" id="term" role="log" aria-live="polite" aria-label="Scanner log"></div>
-        <p class="scan-hint">Press <b>scan</b>, then keep the animal in the ring while you slide your phone <b>left, then right</b>. A smooth, steady sweep earns a better <b>sync grade</b>.</p>
 
         <div class="controls">
           <button type="button" class="side-btn" id="btn-torch" title="Flashlight" aria-pressed="false" disabled>
@@ -119,17 +104,15 @@
         </div>
 
         <section class="recent" id="recent-wrap" hidden>
-          <div class="section-head"><h2>Recent pulls</h2><div class="wave" data-bars="16"></div></div>
+          <div class="section-head"><h2>Recent pulls</h2></div>
           <div class="recent-strip" id="recent"></div>
         </section>
-        <footer class="hints"><div class="wave" data-bars="26"></div><p>[tap] scan <i>|</i> [slide] verify <i>|</i> [light] torch</p></footer>
       </section>
 
       <!-- INVENTORY -->
       <section class="view" data-view="binder" hidden>
         <div class="screen-head">
-          <div><h1 class="screen-title">Inventory</h1><p class="sys">// CARD_BINDER <i>|</i> <span id="binder-sub"></span></p></div>
-          <div class="wave" data-bars="22"></div>
+          <div><h1 class="screen-title">Cards</h1><p class="sub" id="binder-sub"></p></div>
         </div>
 
         <div class="filters">
@@ -152,40 +135,42 @@
         <section class="inv-detail chamfer" id="inv-detail" aria-live="polite"></section>
         <div class="slot-grid" id="grid"></div>
         <p class="empty" id="grid-empty" hidden>No cards match these filters yet.</p>
-        <footer class="hints"><div class="wave" data-bars="26"></div><p>[tap] select <i>|</i> [tap×2] open card <i>|</i> [filter] sort</p></footer>
       </section>
 
       <!-- ARENA -->
       <section class="view" data-view="arena" hidden>
         <div class="screen-head">
-          <div><h1 class="screen-title">Arena</h1><p class="sys">// SQUAD_LINK <i>|</i> <span id="arena-sub"></span></p></div>
-          <div class="wave" data-bars="22"></div>
+          <div><h1 class="screen-title">Arena</h1><p class="sub" id="arena-sub"></p></div>
         </div>
         <div id="arena"></div>
-        <footer class="hints"><div class="wave" data-bars="26"></div><p>[squad] pick 3 <i>|</i> [battle] win ◆ <i>|</i> [types] counter</p></footer>
       </section>
 
       <!-- OPS -->
       <section class="view" data-view="ops" hidden>
         <div class="screen-head">
-          <div><h1 class="screen-title">Operations</h1><p class="sys">// DAILY_ORDERS <i>|</i> STREAK <i>|</i> BADGES</p></div>
-          <div class="wave" data-bars="22"></div>
+          <div><h1 class="screen-title">Ops</h1></div>
         </div>
         <div id="ops"></div>
-        <footer class="hints"><div class="wave" data-bars="26"></div><p>[claim] rewards <i>|</i> [scan] daily <i>|</i> [collect] badges</p></footer>
       </section>
 
       <!-- ID -->
       <section class="view" data-view="id" hidden>
         <div class="screen-head">
-          <div><h1 class="screen-title">Operator</h1><p class="sys">// PROFILE <i>|</i> <span id="rank-sub"></span></p></div>
-          <div class="wave" data-bars="22"></div>
+          <div><h1 class="screen-title">Operator</h1><p class="sub" id="rank-sub"></p></div>
         </div>
         <div id="profile"></div>
-        <footer class="hints"><div class="wave" data-bars="26"></div><p>[edit] callsign <i>|</i> [export] backup <i>|</i> [config] sound</p></footer>
       </section>
     </main>
   </div>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg><span>Home</span></button>
+    <button type="button" data-tab="binder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="13" height="17" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10"/><path d="m13.5 8.5 1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4Z"/></svg><span>Cards</span></button>
+    <button type="button" class="tab-scan" data-tab="scan"><span class="tab-scan-core"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><circle cx="12" cy="12" r="3.5"/></svg></span><span>Scan</span></button>
+    <button type="button" data-tab="arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg><span>Arena</span><i class="badge" id="arena-badge" hidden></i></button>
+    <button type="button" data-tab="ops"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L13 9M9 16h6"/></svg><span>Ops</span><i class="badge" id="ops-badge" hidden></i></button>
+  </nav>
+  <div class="pip-toast" id="pip-toast" hidden></div>
 
   <div class="sheet" id="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
