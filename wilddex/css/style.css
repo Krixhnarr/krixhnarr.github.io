@@ -149,6 +149,17 @@ img { display: block; max-width: 100%; }
 .sweep { position: absolute; left: 0; right: 0; height: 2px; top: 0; opacity: 0; pointer-events: none; background: var(--coral); box-shadow: 0 0 18px 4px rgba(255, 121, 114, .6); }
 .viewfinder.scanning .sweep { opacity: 1; animation: sweep 1s cubic-bezier(.45, 0, .55, 1) infinite alternate; }
 @keyframes sweep { from { top: 0; } to { top: 100%; } }
+.sweep-guide { position: absolute; left: 8%; right: 8%; bottom: 17%; display: none; text-align: center; pointer-events: none; }
+.viewfinder.sweeping .sweep-guide { display: block; }
+.viewfinder.sweeping .hud .rings circle { stroke: var(--blush); }
+.sweep-guide p { margin: 0 0 8px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--mint); text-shadow: 0 0 6px #000, 0 0 2px #000; }
+.sweep-guide .arr { color: var(--coral); letter-spacing: -.1em; animation: nudge .7s ease-in-out infinite alternate; }
+.sweep-guide .arr.l { animation-direction: alternate-reverse; }
+@keyframes nudge { from { transform: translateX(-5px); } to { transform: translateX(5px); } }
+.sweep-guide .bar { display: block; height: 4px; border-radius: 4px; background: rgba(13, 14, 16, .6); overflow: hidden; }
+.sweep-guide .bar span { display: block; height: 100%; width: 0; background: var(--coral); box-shadow: var(--glow); }
+.scan-hint { margin: 8px 2px 0; font-size: 11px; color: var(--dim); text-align: center; }
+.scan-hint b { color: var(--coral); text-transform: uppercase; letter-spacing: .1em; }
 .vf-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 24px 24px 30px; background: linear-gradient(180deg, transparent 38%, rgba(13, 14, 16, .94) 72%); }
 .viewfinder.live .vf-overlay, .viewfinder.frozen .vf-overlay { display: none; }
 .vf-title { margin: 0; font-family: var(--dot); font-weight: 900; font-size: 30px; line-height: 1; text-transform: uppercase; color: var(--coral); }
