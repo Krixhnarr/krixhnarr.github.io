@@ -6,6 +6,7 @@ import { TYPES, TYPE_IDS, AFFINITY, glyph } from './affinity.js';
 import * as game from './game.js';
 import { detectFrame } from './liveness.js';
 import { recordSweep, analyseSweep } from './parallax.js';
+import { renderDots, startTwinkle, dotSVG } from './dotmatrix.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1383,7 +1384,7 @@ async function bootSequence() {
   let skip = false;
   boot.addEventListener('click', () => { skip = true; }, { once: true });
   const lines = [
-    '<span class="hl">WILDDEX</span>',
+    `<span class="hl dot-text"><span class="sr">WILDDEX</span>${dotSVG('WILDDEX')}</span>`,
     `<span class="ok">●</span> card database ... ${ENTRIES.length} signatures`,
     `<span class="ok">●</span> operator binder .. ${caughtKeys().length} captured`,
     `<span class="ok">●</span> affinity matrix .. ${TYPE_IDS.length} types`,
@@ -1429,6 +1430,8 @@ function handleCompareLink() {
 
 async function boot() {
   drawWaves();
+  $$('.brand, .screen-title').forEach(renderDots);
+  startTwinkle();
   let tab = 'scan';
   try { tab = sessionStorage.getItem('wilddex.tab') || 'scan'; } catch { /* ignore */ }
   if (!['scan', 'binder', 'ops', 'id'].includes(tab)) tab = 'scan';
