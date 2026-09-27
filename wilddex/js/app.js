@@ -9,6 +9,8 @@ import { recordSweep, analyseSweep } from './parallax.js';
 import { renderDots, startTwinkle, dotSVG } from './dotmatrix.js';
 import * as battle from './battle.js';
 import * as loot from './loot.js';
+import * as music from './music.js';
+import * as FX from './fx.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -35,7 +37,8 @@ let audio;
 function tone(freq, at, dur, type = 'square', vol = 0.035) {
   if (!state().settings.sound) return;
   try {
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio = audio || music.context();
+    if (!audio) return;
     const t = audio.currentTime + at;
     const o = audio.createOscillator();
     const g = audio.createGain();
@@ -91,10 +94,12 @@ function speak(text) {
     u.voice = voices.find((v) => /en-GB/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang)) || null;
     u.rate = 1.04;
     u.pitch = 0.8;
+    music.duck(true);
+    u.onend = u.onerror = () => music.duck(false);
     speechSynthesis.speak(u);
   } catch { /* ignore */ }
 }
-const stopSpeaking = () => { try { speechSynthesis.cancel(); } catch { /* ignore */ } };
+const stopSpeaking = () => { try { speechSynthesis.cancel(); } catch { /* ignore */ } music.duck(false); };
 
 // ---------------------------------------------------------------- text effects
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*<>/\\=+';
@@ -223,6 +228,7 @@ function flushLevelUps() {
     </div>`;
   box.hidden = false;
   sfx.levelup();
+  FX.confetti(110);
   buzz([60, 50, 60, 50, 220]);
   const stage = $('.lu-body', box);
   burst(stage, 3);
@@ -279,7 +285,7 @@ function closeSheet() {
   onSheetClose = null;
   if (cb) cb();
   if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
-  setTimeout(flushLevelUps, 150);
+  setTimeout(flushLevelUps, $('.fly-card') ? 950 : 150); // let a collect flight land first
 }
 $('#sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeSheet(); });
 document.addEventListener('keydown', (e) => {
@@ -612,6 +618,7 @@ async function runScan(source) {
   if (busy) return;
   busy = true;
   $('#btn-scan').disabled = true;
+  music.duck(true);
   try {
     if (!stream) { await startCamera(); if (!stream) return; }
     warmModel().catch(() => {});
@@ -681,6 +688,7 @@ async function runScan(source) {
   } finally {
     busy = false;
     $('#btn-scan').disabled = false;
+    music.duck(false);
   }
 }
 
@@ -863,7 +871,12 @@ async function register(e, form, alternatives = []) {
       <div class="subtle-row"><button type="button" class="link" data-act="wrong">misidentified? not a ${esc(e.n.toLowerCase())}</button></div>
     </div>
     ${isNew ? `<div class="actions pre"><button type="button" class="btn primary" data-act="reveal">Decrypt card</button></div>` : ''}`,
-  { onClose: resetScanner });
+  { onClose: () => {
+    resetScanner();
+    if (isNew) FX.flyToBinder(artURL(e), flyFrom, $('.tabbar [data-tab="binder"]'));
+  } });
+  if (isNew) freshKeys.add(e.k);
+  let flyFrom = null;
 
   const after = $('.after', body);
   const celebrate = () => {
@@ -875,6 +888,8 @@ async function register(e, form, alternatives = []) {
     setTimeout(() => $('.xpbar', body)?.classList.add('go'), 300);
   };
   const startDetail = () => {
+    flyFrom = $('.stage .card', body)?.getBoundingClientRect() || null;
+    if (holoNew || (isNew && e.r === 4) || setDone) setTimeout(() => FX.confetti(holoNew || e.r === 4 ? 140 : 90), 350);
     after.hidden = false;
     celebrate();
     $$('[data-decode]', after).forEach((el) => decode(el));
@@ -990,6 +1005,7 @@ function renderRecent() {
 }
 
 // ---- binder
+const freshKeys = new Set(); // cards caught this session; their slots sparkle once
 const binder = { set: 'all', type: null, sort: 'no', owned: false, selected: null };
 function renderBinder() {
   const s = state();
@@ -1021,7 +1037,7 @@ function renderBinder() {
   $('#grid').innerHTML = list.map((e) => {
     const rec = s.caught[e.k];
     const intel = !rec && s.intel[e.k];
-    const cls = `slot r${e.r}${rec ? ' owned' : ' locked'}${intel ? ' intel' : ''}${rec?.holo ? ' holo' : ''}`;
+    const cls = `slot r${e.r}${rec ? ' owned' : ' locked'}${intel ? ' intel' : ''}${rec?.holo ? ' holo' : ''}${freshKeys.has(e.k) ? ' fresh' : ''}`;
     return `<button type="button" class="${cls}" data-slot="${e.k}" style="--rc:${rc[e.r]};--tc:${typeColor(e)}" aria-pressed="${binder.selected === e.k}"
       aria-label="#${pad(e.no)} ${rec || intel ? esc(e.n) : 'unknown'}${rec ? `, seen ${rec.count} times` : ', not captured'}">
       <span class="no">${pad(e.no)}</span><i class="rar"></i>
@@ -1030,6 +1046,7 @@ function renderBinder() {
     </button>`;
   }).join('');
   $('#grid-empty').hidden = list.length > 0;
+  freshKeys.clear();
   $('#inv-detail').hidden = !binder.selected;
   if (binder.selected) renderInvDetail(BY_KEY[binder.selected]);
 }
@@ -1209,6 +1226,7 @@ function pickSquad(i) {
 
 // ---- battle screen
 let battleLocked = false;
+let inBattle = false;
 const MOVE_NAME = (m) => (m === 'guard' ? 'Guard' : m === 'overdrive' ? 'Overdrive' : `${TYPES[m.split(':')[1]].name} strike`);
 
 function startBattle(kind) {
@@ -1220,6 +1238,8 @@ function startBattle(kind) {
   if (kind === 'rival') { const r = battle.dailyRival(s); foe = battle.rivalTeam(r); foeName = r.name; } else { foe = battle.wildTeam(s, you.length); foeName = 'Wild signal'; }
   const b = battle.newBattle(you, foe, { kind });
   const me = s.name || 'Operator';
+  inBattle = true;
+  music.setScene('battle');
   sfx.charge();
   buzz([20, 30, 20]);
   const sideHTML = (side, team) => `<div class="side ${side}" data-side="${side}">
@@ -1232,7 +1252,7 @@ function startBattle(kind) {
       <div class="field">${sideHTML('foe', foe)}${sideHTML('you', you)}<div class="bt-banner" aria-hidden="true"></div></div>
       <div class="bt-log" aria-live="polite"></div>
       <div class="moves"></div>
-    </div>`, { onClose: () => { battleLocked = false; renderArena(); } });
+    </div>`, { onClose: () => { battleLocked = false; inBattle = false; music.setScene(timeScene()); renderArena(); } });
   const root = $('.battle', body);
   const sideEl = (side) => $(`.side.${side}`, root);
   const logLine = (html) => {
@@ -1311,6 +1331,9 @@ function startBattle(kind) {
       att.classList.remove('lunge'); void att.offsetWidth; att.classList.add('lunge');
       if (e.move === 'overdrive') { sfx.overdrive(); root.classList.add('od-flash'); setTimeout(() => root.classList.remove('od-flash'), 500); }
       await sleep(220 * fx);
+      const big = e.crit || e.move === 'overdrive' || e.mult > 1;
+      FX.typeFX(e.type, tgt, { big });
+      if (big) FX.shake($('.field', root));
       tgt.classList.remove('hurt'); void tgt.offsetWidth; tgt.classList.add('hurt');
       sfx.hit(e.mult);
       buzz(e.crit || e.move === 'overdrive' ? [30, 30, 70] : e.mult > 1 ? 40 : 20);
@@ -1324,6 +1347,7 @@ function startBattle(kind) {
       await sleep(750 * fx);
     } else if (e.t === 'faint') {
       const el = sideEl(e.side);
+      FX.koStars($('.fighter', el));
       $('.fighter', el).classList.add('faint');
       sfx.faint();
       logLine(`<b>${esc(e.name)}</b> is out of the fight!`);
@@ -1348,7 +1372,8 @@ function startBattle(kind) {
     earnXP(reward.xp);
     store.save();
     refreshAll(true);
-    (won ? sfx.win : sfx.lose)();
+    music.stinger(won ? 'win' : 'lose');
+    if (won) FX.confetti(kind === 'rival' && reward.credits ? 130 : 70);
     buzz(won ? [40, 60, 40, 60, 160] : [120]);
     const more = kind === 'wild' || !won;
     $('.moves', root).innerHTML = '';
@@ -1513,6 +1538,10 @@ function renderProfile() {
         <span class="seg-pick" role="group" aria-label="Sky">${['auto', 'day', 'night'].map((m) => `<button type="button" data-theme-mode="${m}" aria-pressed="${(s.settings.theme || 'auto') === m}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</span></div>
       <label class="toggle"><span>Voice<small>Read new cards aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
+      <label class="toggle"><span>Music<small>Day, night & battle themes</small></span>
+        <input type="checkbox" class="switch" data-setting="music" ${s.settings.music !== false ? 'checked' : ''}></label>
+      <label class="toggle vol"><span>Music volume</span>
+        <input type="range" id="music-vol" min="0" max="100" step="5" value="${Math.round((s.settings.musicVol ?? 0.6) * 100)}" aria-label="Music volume"></label>
       <label class="toggle"><span>Sound FX</span>
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
       <label class="toggle"><span>Haptics</span>
@@ -1550,6 +1579,7 @@ function renderProfile() {
 }
 $('#profile').addEventListener('input', (ev) => {
   if (ev.target.id === 'collector-name') { state().name = ev.target.value.trim(); store.save(); }
+  if (ev.target.id === 'music-vol') { state().settings.musicVol = Number(ev.target.value) / 100; music.setVolume(state().settings.musicVol); store.save(); }
 });
 $('#profile').addEventListener('change', async (ev) => {
   const t = ev.target;
@@ -1557,6 +1587,7 @@ $('#profile').addEventListener('change', async (ev) => {
     state().settings[t.dataset.setting] = t.checked;
     store.save();
     if (t.dataset.setting === 'sound' && t.checked) sfx.again();
+    if (t.dataset.setting === 'music') { music.setEnabled(t.checked); if (t.checked) { music.unlock(); music.setScene(timeScene()); } }
     if (t.dataset.setting === 'location' && t.checked) {
       const pos = await getPosition();
       if (!pos) {
@@ -1920,7 +1951,7 @@ function renderHome() {
   const crates = s.locker?.crates || 0;
   const holos = keys.filter((k) => s.caught[k].holo).length;
   const sectors = SETS.filter((x) => x.entries.every((e) => s.caught[e.k])).length;
-  const tile = ({ tab, goto, act, icon, label, value, sub, hot, tc, bar }) => `<button type="button" class="tile${hot ? ' hot' : ''}${bar != null ? ' wide' : ''}"
+  const tile = ({ tab, goto, act, icon, label, value, sub, hot, tc, bar, cls }) => `<button type="button" class="tile${hot ? ' hot' : ''}${bar != null ? ' wide' : ''}${cls ? ` ${cls}` : ''}"
       ${tab ? `data-tab="${tab}"` : ''} ${goto ? `data-goto="${goto}"` : ''} ${act ? `data-home="${act}"` : ''} style="--tc:${tc}">
       <span class="t-icon">${icon}</span><span class="t-label">${label}</span><b class="t-value">${value}</b>
       ${bar != null ? `<i class="t-bar"><em style="width:${Math.max(2, bar * 100)}%"></em></i>` : ''}<small class="t-sub">${sub}</small></button>`;
@@ -1938,7 +1969,7 @@ function renderHome() {
       ${tile({ tab: 'ops', icon: ICON.orders, label: 'Orders', value: `${done}/${d.missions.length}`, sub: ready ? `${ready} reward${ready > 1 ? 's' : ''} ready!` : 'Daily missions', hot: ready > 0, tc: '#2F9BEA' })}
       ${tile(crates ? { act: 'crate', icon: ICON.crate, label: 'Crates', value: crates, sub: 'Tap to open!', hot: true, tc: '#F2B51D' }
         : { tab: 'id', goto: 'supply', icon: ICON.crate, label: 'Crates', value: 0, sub: `${loot.CRATE_COST}◆ each`, tc: '#F2B51D' })}
-      ${tile({ tab: 'ops', icon: ICON.streak, label: 'Streak', value: `${streak}<small>d</small>`, sub: `best ${s.streak?.best || 0}`, hot: streak > 0 && s.streak.last !== game.today(), tc: '#F0A05B' })}
+      ${tile({ tab: 'ops', icon: ICON.streak, label: 'Streak', value: `${streak}<small>d</small>`, sub: `best ${s.streak?.best || 0}`, hot: streak > 0 && s.streak.last !== game.today(), tc: '#F0A05B', cls: streak > 0 ? 'lit' : '' })}
       ${tile({ tab: 'ops', icon: ICON.event, label: esc(ev.name), value: `${evP}/${ev.goal}`, bar: evP / ev.goal, sub: ev.claimed ? 'Complete ✓' : `${ev.daysLeft}d left`, hot: evP >= ev.goal && !ev.claimed, tc: ev.type ? TYPES[ev.type].color : '#2F9BEA' })}
       ${tile({ tab: 'binder', icon: ICON.cards, label: 'Collection', value: `${n}<small>/${ENTRIES.length}</small>`, bar: n / ENTRIES.length, sub: `${holos} holo · ${sectors} sectors`, tc: '#2BB5A0' })}
     </div>`;
@@ -1974,8 +2005,10 @@ document.addEventListener('click', (ev) => {
 });
 
 // ---------------------------------------------------------------- tabs
+const TAB_ORDER = ['home', 'binder', 'scan', 'arena', 'ops', 'id'];
 function showTab(tab) {
   const changed = tab !== currentTab;
+  const dir = TAB_ORDER.indexOf(tab) >= TAB_ORDER.indexOf(currentTab) ? 'from-right' : 'from-left';
   currentTab = tab;
   $$('.tabbar [data-tab]').forEach((b) => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
@@ -1983,7 +2016,11 @@ function showTab(tab) {
   });
   $$('.view').forEach((v) => {
     v.hidden = v.dataset.view !== tab;
-    if (!v.hidden && changed) { v.classList.remove('enter'); void v.offsetWidth; v.classList.add('enter'); }
+    if (!v.hidden && changed) {
+      v.classList.remove('enter', 'from-right', 'from-left'); void v.offsetWidth; v.classList.add('enter', dir);
+      clearTimeout(v.enterTimer);
+      v.enterTimer = setTimeout(() => v.classList.remove('enter', 'from-right', 'from-left'), 900);
+    }
   });
   if (tab === 'home') renderHome();
   if (tab === 'scan') { if (wantCamera && !stream) startCamera(); } else stopCamera();
@@ -2005,6 +2042,7 @@ document.addEventListener('click', (ev) => {
   if (b.hasAttribute('data-autostart') && !stream) startCamera();
 });
 document.addEventListener('visibilitychange', () => {
+  music.suspend(document.hidden);
   if (document.hidden) stopCamera();
   else if (currentTab === 'scan' && wantCamera) startCamera();
 });
@@ -2109,10 +2147,18 @@ function applyTime() {
   const night = mode === 'night' || (mode === 'auto' && (h >= 19 || h < 6));
   document.documentElement.dataset.time = night ? 'night' : 'day';
   $('meta[name="theme-color"]').setAttribute('content', night ? '#0B1633' : '#62C4FF');
+  if (!inBattle) music.setScene(night ? 'night' : 'day');
 }
+const timeScene = () => (document.documentElement.dataset.time === 'night' ? 'night' : 'day');
 
 async function boot() {
+  music.setEnabled(state().settings.music !== false);
+  music.setVolume(state().settings.musicVol ?? 0.6);
   applyTime();
+  // Browsers only start audio after a tap; start the soundtrack on the first one.
+  const wake = () => music.unlock();
+  document.addEventListener('pointerdown', wake, { once: true, capture: true });
+  document.addEventListener('keydown', wake, { once: true, capture: true });
   setInterval(applyTime, 5 * 60 * 1000);
   drawWaves();
   $$('.screen-title').forEach(renderDots);

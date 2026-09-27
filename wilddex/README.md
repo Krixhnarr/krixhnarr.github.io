@@ -44,6 +44,15 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   rotating weekly events.
 - **Storage**: progress in `localStorage`, capture photos in IndexedDB, with
   backup/restore on the ID screen.
+- **Music & life**: a soundtrack synthesised live with Web Audio
+  (`js/music.js`, no audio files) — a bright day adventure theme, a calm
+  night lullaby, a driving battle theme, win/lose jingles and quiet
+  birdsong or crickets. It starts on the first tap, ducks under scans and
+  narration, pauses in the background, and has a toggle and volume in
+  Config. Effects (`js/fx.js`): birds, butterflies, swaying grass and
+  shooting stars in the sky; new cards fly into the Cards tab; each of the
+  13 types has its own attack effect; confetti for big moments; tabs slide
+  and tiles pop in.
 - **Look — Field Expedition theme**: a bright outdoor palette that reads
   well in sunlight — sky-blue scene with drifting clouds, sun and rolling
   hills, white rounded panels, sunny-yellow press-down buttons, coral and
