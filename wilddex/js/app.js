@@ -39,6 +39,7 @@ function tone(freq, at, dur, type = 'square', vol = 0.035) {
   try {
     audio = audio || music.context();
     if (!audio) return;
+    if (audio.state !== 'running') audio.resume().catch(() => {});
     const t = audio.currentTime + at;
     const o = audio.createOscillator();
     const g = audio.createGain();
@@ -1587,7 +1588,7 @@ $('#profile').addEventListener('change', async (ev) => {
     state().settings[t.dataset.setting] = t.checked;
     store.save();
     if (t.dataset.setting === 'sound' && t.checked) sfx.again();
-    if (t.dataset.setting === 'music') { music.setEnabled(t.checked); if (t.checked) { music.unlock(); music.setScene(timeScene()); } }
+    if (t.dataset.setting === 'music') { music.setEnabled(t.checked); if (t.checked) { music.setScene(timeScene()); music.unlock().then(updateMusicBtn); } updateMusicBtn(); }
     if (t.dataset.setting === 'location' && t.checked) {
       const pos = await getPosition();
       if (!pos) {
@@ -1957,7 +1958,7 @@ function renderHome() {
       ${bar != null ? `<i class="t-bar"><em style="width:${Math.max(2, bar * 100)}%"></em></i>` : ''}<small class="t-sub">${sub}</small></button>`;
   $('#home').innerHTML = `
     <div class="home-top"><span class="dot-text home-logo"><span class="sr">WildDex</span>${dotSVG('WILDDEX')}</span>
-      <button type="button" class="help-btn" data-help="intro" aria-label="How to play">?</button></div>
+      <span class="home-btns">${musicBtnHTML()}<button type="button" class="help-btn" data-help="intro" aria-label="How to play">?</button></span></div>
     <section class="hero">
       <div class="hero-rays" aria-hidden="true"></div>
       <div class="hero-card">${recent ? cardHTML(BY_KEY[recent]) : '<div class="card ghost"><b>?</b><small>your first card</small></div>'}</div>
@@ -1976,6 +1977,42 @@ function renderHome() {
 }
 $('#home').addEventListener('click', (ev) => {
   if (ev.target.closest('[data-home="crate"]')) { sfx.click(); crateFlow(true); return; }
+});
+
+// ---------------------------------------------------------------- music button
+const NOTE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path class="mute" d="M3 3l18 18"/></svg>';
+function musicBtnHTML() {
+  const on = state().settings.music !== false;
+  return `<button type="button" class="help-btn music-btn${on ? '' : ' off'}${on && music.isPlaying() ? ' live' : ''}" data-music aria-pressed="${on}" aria-label="Music ${on ? 'on' : 'off'}">${NOTE_SVG}</button>`;
+}
+function updateMusicBtn() {
+  $$('[data-music]').forEach((b) => {
+    const on = state().settings.music !== false;
+    b.classList.toggle('off', !on);
+    b.classList.toggle('live', on && music.isPlaying());
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', `Music ${on ? 'on' : 'off'}`);
+  });
+  const sw = $('[data-setting="music"]');
+  if (sw) sw.checked = state().settings.music !== false;
+}
+document.addEventListener('click', async (ev) => {
+  if (!ev.target.closest('[data-music]')) return;
+  const s = state();
+  if (s.settings.music !== false && (!music.isPlaying() || performance.now() - music.liveSince() < 1200)) {
+    // Music is on but the browser hadn't let it start yet: this tap starts it.
+    music.setScene(inBattle ? 'battle' : timeScene());
+    await music.unlock();
+    toast(music.isPlaying() ? 'MUSIC ON' : 'TURN UP THE VOLUME');
+    updateMusicBtn();
+    return;
+  }
+  s.settings.music = s.settings.music === false;
+  store.save();
+  music.setEnabled(s.settings.music);
+  if (s.settings.music) { music.setScene(inBattle ? 'battle' : timeScene()); await music.unlock(); }
+  toast(s.settings.music ? 'MUSIC ON' : 'MUSIC OFF');
+  updateMusicBtn();
 });
 
 // ---------------------------------------------------------------- help (the "?" buttons)
@@ -2155,10 +2192,10 @@ async function boot() {
   music.setEnabled(state().settings.music !== false);
   music.setVolume(state().settings.musicVol ?? 0.6);
   applyTime();
-  // Browsers only start audio after a tap; start the soundtrack on the first one.
-  const wake = () => music.unlock();
-  document.addEventListener('pointerdown', wake, { once: true, capture: true });
-  document.addEventListener('keydown', wake, { once: true, capture: true });
+  // Browsers (iPhones especially) only start audio from a finished tap, so try
+  // on every tap until sound is live — and again after the app is backgrounded.
+  const wake = () => { music.unlock().then(updateMusicBtn); };
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach((t) => document.addEventListener(t, wake, { capture: true, passive: true }));
   setInterval(applyTime, 5 * 60 * 1000);
   drawWaves();
   $$('.screen-title').forEach(renderDots);
@@ -2183,7 +2220,16 @@ async function boot() {
   if (!state().onboarded) showIntro();
   handleCompareLink();
   window.addEventListener('hashchange', handleCompareLink);
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // When a new version installs, reload once so the update shows straight away.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || window.__reloading) return;
+      window.__reloading = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
+  }
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
 }
 
