@@ -9,23 +9,25 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const pad = (n) => String(n).padStart(3, '0');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const title = (s) => s.replace(/(^|[\s-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
-const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const snake = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const isoDate = (ts) => new Date(ts).toISOString().slice(0, 10);
 const state = () => store.getState();
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const RANKS = [
-  [0, 'Rookie', 'Collector novus'],
-  [1, 'Novice Collector', 'Collector tiro'],
-  [10, 'Explorer', 'Explorator curiosus'],
-  [25, 'Field Researcher', 'Investigator agrestis'],
-  [50, 'Naturalist', 'Naturalista peritus'],
-  [100, 'Wildlife Expert', 'Peritus faunae'],
-  [175, 'Master Collector', 'Magister collectionis'],
-  [ENTRIES.length, 'WildDex Champion', 'Campio maximus'],
+  [0, 'Rookie'],
+  [1, 'Novice Collector'],
+  [10, 'Explorer'],
+  [25, 'Field Researcher'],
+  [50, 'Naturalist'],
+  [100, 'Wildlife Expert'],
+  [175, 'Master Collector'],
+  [ENTRIES.length, 'WildDex Champion'],
 ];
 
 // ---------------------------------------------------------------- sound & voice
 let audio;
-function tone(freq, at, dur, type = 'sine', vol = 0.07) {
+function tone(freq, at, dur, type = 'square', vol = 0.035) {
   if (!state().settings.sound) return;
   try {
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
@@ -35,7 +37,7 @@ function tone(freq, at, dur, type = 'sine', vol = 0.07) {
     o.type = type;
     o.frequency.setValueAtTime(freq, t);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.linearRampToValueAtTime(vol, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(audio.destination);
     o.start(t);
@@ -43,10 +45,14 @@ function tone(freq, at, dur, type = 'sine', vol = 0.07) {
   } catch { /* no audio */ }
 }
 const sfx = {
-  scan: () => [0, 0.14, 0.28, 0.42, 0.56, 0.7].forEach((t, i) => tone(880 + i * 90, t, 0.06, 'triangle', 0.035)),
-  success: () => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.09, 0.35, 'triangle', 0.07)),
-  again: () => { tone(659.25, 0, 0.2, 'triangle'); tone(880, 0.1, 0.3, 'triangle'); },
-  fail: () => { tone(330, 0, 0.18, 'sine', 0.06); tone(247, 0.14, 0.28, 'sine', 0.06); },
+  scan: () => { for (let i = 0; i < 10; i++) tone(1200 + (i % 3) * 400, i * 0.08, 0.03, 'square', 0.02); },
+  success: () => {
+    [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, i * 0.07, 0.18, 'square', 0.03));
+    tone(1568, 0.4, 0.5, 'triangle', 0.05);
+  },
+  again: () => { tone(880, 0, 0.08); tone(1320, 0.09, 0.14); },
+  fail: () => { tone(220, 0, 0.14, 'sawtooth', 0.03); tone(165, 0.13, 0.26, 'sawtooth', 0.03); },
+  click: () => tone(1800, 0, 0.02, 'square', 0.015),
 };
 
 function speak(text) {
@@ -56,12 +62,57 @@ function speak(text) {
     const u = new SpeechSynthesisUtterance(text);
     const voices = speechSynthesis.getVoices();
     u.voice = voices.find((v) => /en-GB/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang)) || null;
-    u.rate = 1;
-    u.pitch = 0.9;
+    u.rate = 1.04;
+    u.pitch = 0.8;
     speechSynthesis.speak(u);
   } catch { /* ignore */ }
 }
 const stopSpeaking = () => { try { speechSynthesis.cancel(); } catch { /* ignore */ } };
+
+// ---------------------------------------------------------------- text effects
+const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*<>/\\=+';
+function decode(el, text = el.dataset.text || el.textContent, dur = 650) {
+  el.dataset.text = text;
+  if (reducedMotion()) { el.textContent = text; return; }
+  const start = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / dur);
+    const n = Math.floor(p * text.length);
+    let out = text.slice(0, n);
+    for (let i = n; i < text.length; i++) out += /\s/.test(text[i]) ? text[i] : GLYPHS[(Math.random() * GLYPHS.length) | 0];
+    el.textContent = out;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Types text into el; the full text is available to screen readers at once.
+function typeOut(el, text, cps = 70) {
+  const wrap = el.closest('.dex-text');
+  if (reducedMotion()) { el.textContent = text; wrap?.classList.add('done'); return; }
+  let i = 0;
+  const tick = () => {
+    if (!el.isConnected) return;
+    i = Math.min(text.length, i + 2);
+    el.textContent = text.slice(0, i);
+    if (i < text.length) setTimeout(tick, 2000 / cps);
+    else wrap?.classList.add('done');
+  };
+  tick();
+}
+
+// ---------------------------------------------------------------- terminal log
+const term = $('#term');
+function log(html, cls = '') {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.innerHTML = html;
+  term.appendChild(line);
+  while (term.children.length > 6) term.firstChild.remove();
+  return line;
+}
+const idle = () => log('&gt; awaiting target');
+const asciiBar = (p, n = 12) => '█'.repeat(Math.round(p * n)) + '░'.repeat(n - Math.round(p * n));
 
 // ---------------------------------------------------------------- UI helpers
 let toastTimer;
@@ -77,7 +128,7 @@ function flash() {
   const f = document.createElement('div');
   f.className = 'flash';
   document.body.appendChild(f);
-  setTimeout(() => f.remove(), 500);
+  setTimeout(() => f.remove(), 450);
 }
 
 let lastFocus = null;
@@ -95,6 +146,7 @@ function openSheet(html, { onClose } = {}) {
   $('.sheet-panel', sheet).scrollTop = 0;
   $('.sheet-panel', sheet).focus({ preventScroll: true });
   hydratePhotos(body);
+  $$('[data-decode]', body).forEach((el) => decode(el));
   return body;
 }
 function closeSheet() {
@@ -118,20 +170,26 @@ function hydratePhotos(root) {
   });
 }
 
-// ---------------------------------------------------------------- stamps & plates
-function postmark(ts) {
+// ---------------------------------------------------------------- stamps & entries
+function regmark(ts) {
   const d = new Date(ts);
-  const month = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ')[d.getMonth()];
-  const day = `${String(d.getDate()).padStart(2, '0')} ${month}`;
-  const year = d.getFullYear();
-  return `<svg class="postmark" viewBox="0 0 120 120" aria-hidden="true">
-    <circle cx="60" cy="60" r="54" stroke-width="3"/><circle cx="60" cy="60" r="44" stroke-width="1.5"/>
-    <defs><path id="pm-arc" d="M60 60 m-49 0 a49 49 0 1 1 98 0"/></defs>
-    <text font-size="9.5"><textPath href="#pm-arc" startOffset="50%" text-anchor="middle">WILDDEX · REGISTERED</textPath></text>
-    <text x="60" y="58" font-size="15" text-anchor="middle">${day}</text>
-    <text x="60" y="76" font-size="13" text-anchor="middle">${year}</text>
-    <path d="M-2 92 q10-6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 M-2 102 q10-6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0" stroke-width="2.5"/>
+  const date = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getFullYear()).slice(2)}`;
+  return `<svg class="regmark" viewBox="0 0 120 64" aria-hidden="true">
+    <rect x="3" y="3" width="114" height="58" stroke-width="3"/><rect x="9" y="9" width="102" height="46" stroke-width="1"/>
+    <text x="60" y="27" font-size="13" text-anchor="middle" letter-spacing="1.2">REGISTERED</text>
+    <text x="60" y="45" font-size="12" text-anchor="middle" letter-spacing="1.5">✓ ${date}</text>
   </svg>`;
+}
+
+// Deterministic "encrypted" hex noise for locked stamps.
+function noise(no) {
+  let x = (no * 2654435761) >>> 0;
+  let out = '';
+  for (let i = 0; i < 90; i++) {
+    x = (x * 1103515245 + 12345) >>> 0;
+    out += '0123456789ABCDEF'[(x >>> 16) & 15];
+  }
+  return out;
 }
 
 function stampHTML(e, { big = false } = {}) {
@@ -139,75 +197,84 @@ function stampHTML(e, { big = false } = {}) {
   const cls = `stamp-wrap r${e.r}${rec ? '' : ' locked'}`;
   const img = rec && rec.photo
     ? `<img data-photo="${e.k}" alt="Your photo of a ${esc(e.n)}">`
-    : `<span class="ghost-rings"></span><span class="ghost" aria-hidden="true">${e.e}</span>`;
-  const tag = big ? 'div' : 'button type="button"';
-  const endTag = big ? 'div' : 'button';
-  return `<${tag} class="${cls}" data-key="${e.k}" ${big ? '' : `aria-label="No. ${e.no} ${rec ? esc(e.n) : 'not yet registered'}"`}>
+    : `<span class="noise" aria-hidden="true">${noise(e.no)}</span><span class="ghost" aria-hidden="true">${e.e}</span><span class="enc">ENCRYPTED</span>`;
+  const open = big ? '<div' : '<button type="button"';
+  const close = big ? '</div>' : '</button>';
+  return `${open} class="${cls}" data-key="${e.k}" ${big ? '' : `aria-label="No. ${e.no} ${rec ? esc(e.n) : 'not yet registered'}"`}>
       <div class="stamp"><div class="stamp-inner">
         <div class="stamp-img">${img}</div>
-        <div class="stamp-meta"><span>No.${pad(e.no)}</span><span class="val">${RARITY[e.r].value}</span></div>
-        <div class="stamp-name">${rec ? esc(e.n) : '???'}</div>
+        <div class="stamp-meta"><span>#${pad(e.no)}</span><span class="val">${RARITY[e.r].value}XP</span></div>
+        <div class="stamp-name">${rec ? esc(e.n) : '■■■■■■'}</div>
         <div class="rbar"></div>
       </div></div>
-      ${rec ? postmark(rec.first) : ''}
-    </${endTag}>`;
+      ${rec ? regmark(rec.first) : ''}
+    ${close}`;
 }
 
 function setOf(e) { return SETS.find((s) => s.id === e.set); }
+const setIndex = (set) => String(SETS.indexOf(set) + 1).padStart(2, '0');
 
-function formsHTML(e, rec) {
-  if (e.c.length < 2 || !rec) return '';
-  const names = rec.forms.map((i) => title(LABELS[i]));
-  return `<div class="forms"><p>Forms registered: <b>${rec.forms.length}</b> of ${e.c.length}</p>
-    <ul>${names.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+function codeBlock(obj) {
+  const lines = Object.entries(obj).map(([k, v]) => {
+    const val = typeof v === 'number'
+      ? `<span class="n">${v}</span>`
+      : Array.isArray(v)
+        ? `<span class="p">[</span>${v.map((x) => `<span class="s">"${esc(x)}"</span>`).join('<span class="p">, </span>')}<span class="p">]</span>`
+        : `<span class="s">"${esc(v)}"</span>`;
+    return `  <span class="k">"${k}"</span><span class="p">:</span> ${val}`;
+  });
+  return `<pre class="code"><span class="p">{</span>\n${lines.join('<span class="p">,</span>\n')}\n<span class="p">}</span></pre>`;
 }
 
-function plateHTML(e, { banner = '', note = '', slam = false } = {}) {
+function plateHTML(e, { banner = '', note = '', slam = false, typing = false } = {}) {
   const rec = state().caught[e.k];
   const set = setOf(e);
   const known = !!rec;
   const palette = (rec && rec.palette) || ['#F3F8F5', '#F5B7B2', '#FF7972', '#434448'];
-  const who = esc(state().name || 'WildDex Collector');
+  const data = { habitat: e.h, diet: e.d, size: e.z, rarity: RARITY[e.r].name.toLowerCase() };
+  if (known && e.c.length > 1) data[`forms[${rec.forms.length}/${e.c.length}]`] = rec.forms.map((i) => snake(LABELS[i]));
+  if (known) { data.sightings = rec.count; data.first_seen = isoDate(rec.first); }
   return `<article class="plate">
-    <div class="plate-caption"><span>${set.icon} ${esc(set.name)}</span><span>${RARITY[e.r].name}</span><span>No. ${pad(e.no)}</span></div>
+    <div class="plate-caption"><span>SECTOR <b>${setIndex(set)}·${esc(set.name)}</b></span><span>ID <b>#${pad(e.no)}</b></span></div>
     ${banner}
-    <h2>${known ? esc(e.n) : 'Unknown'}</h2>
-    <div class="plate-sci"><i>${known ? esc(e.s) : 'species incognita'}</i><span>${RARITY[e.r].value} pts</span></div>
+    <h2 data-decode>${known ? esc(e.n) : 'UNKNOWN'}</h2>
+    <div class="plate-sci"><i>${known ? esc(e.s) : 'species incognita'}</i><span>+${RARITY[e.r].value} XP</span></div>
     <div class="plate-figure${slam ? ' slam' : ''}">${stampHTML(e, { big: true })}</div>
     <p class="plate-note">${note || (known
-      ? `Registered ${fmtDate(rec.first)} · seen <b>×${rec.count}</b>`
-      : `Not yet registered · found in <b>${esc(e.h.toLowerCase())}</b>`)}</p>
+      ? `&gt; record ${isoDate(rec.first)} · sightings <b>×${rec.count}</b>`
+      : `&gt; no record · signal detected in <b>${esc(e.h.toLowerCase())}</b>`)}</p>
     ${known ? `
-      <p class="plate-text">${esc(e.t)}</p>
-      <p class="fact"><b>Did you know?</b>${esc(e.f)}</p>
-      <dl class="data">
-        <div><dt>Habitat</dt><dd>${esc(e.h)}</dd></div>
-        <div><dt>Diet</dt><dd>${esc(e.d)}</dd></div>
-        <div><dt>Size</dt><dd>${esc(e.z)}</dd></div>
-      </dl>
-      ${formsHTML(e, rec)}` : `
-      <p class="plate-text">This page of your album is still empty. Find a ${RARITY[e.r].name.toLowerCase()} animal of the <i>${esc(set.name)}</i> sheet and scan it to reveal its entry.</p>`}
+      <section class="panel">
+        <div class="panel-head"><span>DEX_ENTRY_${pad(e.no)}.TXT</span><span class="dots"></span></div>
+        <div class="panel-body"><p class="dex-text${typing ? '' : ' done'}"><span class="sr">${esc(e.t)}</span><span class="typed" aria-hidden="true">${typing ? '' : esc(e.t)}</span></p></div>
+      </section>
+      <p class="comment">/* <b>did you know?</b> ${esc(e.f)} */</p>
+      ${codeBlock(data)}` : `
+      <section class="panel"><div class="panel-head"><span>DEX_ENTRY_${pad(e.no)}.TXT</span><span class="dots"></span></div>
+        <div class="panel-body"><p class="dex-text done">ACCESS DENIED — scan a live specimen of this ${RARITY[e.r].name.toLowerCase()} animal to decrypt its entry.</p></div></section>
+      ${codeBlock({ sector: set.name, habitat: e.h, rarity: RARITY[e.r].name.toLowerCase(), status: 'encrypted' })}`}
     <div class="plate-foot">
-      <div class="who">${known ? 'Colour study' : 'Awaiting specimen'}<span>${who}</span></div>
+      <div class="who">${known ? 'Spectral analysis' : 'Awaiting sample'}<span>op:${esc(snake(state().name || 'operator'))}</span></div>
       <div class="swatches">${palette.map((c) => `<div class="swatch"><i style="background:${c}"></i><small>${c.toUpperCase()}</small></div>`).join('')}</div>
-      <div class="plate-no">${e.no}</div>
+      <div class="plate-no">${pad(e.no)}</div>
     </div>
   </article>`;
 }
 
+const speakBtn = `<button type="button" class="btn" data-act="speak"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>Play audio</button>`;
+
 function openEntry(key) {
   const e = BY_KEY[key];
   const rec = state().caught[e.k];
+  sfx.click();
   const body = openSheet(`${plateHTML(e)}
-    <div class="actions">${rec ? `<button type="button" class="btn" data-act="speak">
-      <svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>Read aloud</button>` : ''}
-      <button type="button" class="btn dark" data-close>Close</button></div>`);
+    <div class="actions">${rec ? speakBtn : ''}<button type="button" class="btn primary" data-close>Close</button></div>`);
   body.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-act="speak"]')) speak(`${e.n}. ${e.t}`);
   });
 }
 
-// ---------------------------------------------------------------- colour study
+// ---------------------------------------------------------------- spectral analysis
 function extractPalette(canvas) {
   const N = 48;
   const c = document.createElement('canvas');
@@ -254,8 +321,9 @@ let busy = false;
 
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    $('#vf-text').textContent = 'Camera isn\'t available in this browser — upload a photo instead.';
+    $('#vf-text').textContent = 'No optics available in this browser — feed the scanner a photo instead.';
     $('#btn-camera').hidden = true;
+    log('[err] optics unavailable · fallback=image_upload', 'err');
     return;
   }
   stopCamera();
@@ -269,16 +337,21 @@ async function startCamera() {
     wantCamera = true;
     try { localStorage.setItem('wilddex.cam', '1'); } catch { /* ignore */ }
     const settings = stream.getVideoTracks()[0].getSettings();
-    vf.classList.toggle('mirror', settings.facingMode === 'user');
+    const front = settings.facingMode === 'user';
+    vf.classList.toggle('mirror', front);
     vf.classList.add('live');
-    setStatus('Point at an animal and press <em>scan</em>.');
+    $('#rec').textContent = '● LIVE';
+    $('#lens').textContent = `LENS:${front ? 'FRONT' : 'REAR'}`;
+    log(`[ok] optics online · lens=${front ? 'front' : 'rear'} · ${video.videoWidth}×${video.videoHeight}`, 'ok');
+    idle();
     warmModel();
   } catch (err) {
     vf.classList.remove('live');
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     $('#vf-text').textContent = denied
-      ? 'Camera permission was blocked. Allow it in your browser settings, or upload a photo instead.'
-      : 'No camera found — upload a photo instead.';
+      ? 'Camera permission blocked. Allow it in browser settings, or feed the scanner a photo.'
+      : 'No camera found — feed the scanner a photo instead.';
+    log(`[err] optics ${denied ? 'permission denied' : 'not found'}`, 'err');
   }
 }
 
@@ -287,17 +360,17 @@ function stopCamera() {
   stream = null;
   video.srcObject = null;
   vf.classList.remove('live');
+  $('#rec').textContent = '○ STBY';
 }
 
 function captureFrame() {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const side = Math.min(vw, vh);
-  const ctx = freezeCtx;
-  ctx.save();
-  if (vf.classList.contains('mirror')) { ctx.translate(freeze.width, 0); ctx.scale(-1, 1); }
-  ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, freeze.width, freeze.height);
-  ctx.restore();
+  freezeCtx.save();
+  if (vf.classList.contains('mirror')) { freezeCtx.translate(freeze.width, 0); freezeCtx.scale(-1, 1); }
+  freezeCtx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, freeze.width, freeze.height);
+  freezeCtx.restore();
 }
 
 async function drawFileToFreeze(file) {
@@ -318,20 +391,23 @@ function unfreeze() {
 }
 
 // ---------------------------------------------------------------- model
-function setStatus(html) { $('#status').innerHTML = html; }
-function showMeter(p) {
-  const m = $('#meter');
-  m.hidden = p == null || p >= 1;
-  $('#meter-bar').style.width = `${Math.round((p || 0) * 100)}%`;
-}
-
 let modelPromise = null;
 function warmModel() {
   if (!modelPromise) {
+    let line = null;
     modelPromise = loadModel((p) => {
-      if (p < 1 && !isReady()) showMeter(p);
-    }).then((m) => { showMeter(null); return m; })
-      .catch((err) => { modelPromise = null; showMeter(null); throw err; });
+      if (isReady() || p >= 1) return;
+      const html = `[..] loading neural core ${asciiBar(p)} ${Math.round(p * 100)}%`;
+      if (line && line.isConnected) line.innerHTML = html; else line = log(html);
+    }).then((m) => {
+      if (line && line.isConnected) { line.className = 'ok'; line.innerHTML = '[ok] neural core online · mobilenet_v2 · 261 signatures'; }
+      else log('[ok] neural core online · mobilenet_v2 · 261 signatures', 'ok');
+      return m;
+    }).catch((err) => {
+      modelPromise = null;
+      log('[err] neural core failed to load — check connection', 'err');
+      throw err;
+    });
   }
   return modelPromise;
 }
@@ -350,9 +426,10 @@ async function runScan(source) {
     flash();
     sfx.scan();
     const started = performance.now();
-    if (!isReady()) setStatus('Loading the recognition model… <em>first time only</em>');
+    log(`&gt; wilddex.scan --source=${source}`, 'cmd');
+    log('[..] frame captured · 448×448 · rgb');
     await warmModel();
-    setStatus('Analysing specimen…');
+    log('[..] inference ×3 (full · mirror · crop)');
     const probs = await classify(freeze);
     const v = interpret(probs);
     const wait = 1300 - (performance.now() - started);
@@ -364,7 +441,7 @@ async function runScan(source) {
   } catch (err) {
     console.error(err);
     sfx.fail();
-    setStatus('Something went wrong while scanning. Please try again.');
+    log('[err] scan aborted · please retry', 'err');
     unfreeze();
   } finally {
     busy = false;
@@ -373,46 +450,50 @@ async function runScan(source) {
 }
 
 async function handleVerdict(v) {
+  const conf = (x) => x.toFixed(2);
   if (v.kind === 'match') {
+    log(`[ok] match <b>${snake(v.top.entry.s)}</b> · conf=${conf(v.top.score)}`, 'ok');
     await register(v.top.entry, v.top.form, v.alternatives.filter((a) => a.entry !== v.top.entry));
   } else if (v.kind === 'unsure') {
     sfx.again();
-    setStatus('Specimen unclear — <em>which one is it?</em>');
-    showChoices(v.alternatives, 'The scan was inconclusive. Pick the right animal, or try again closer and in better light.');
+    log(`[warn] low confidence · top=${conf(v.top.score)} · manual id required`, 'warn');
+    showChoices(v.alternatives, 'Signal inconclusive. Select the correct specimen, or rescan closer and in better light.');
   } else if (v.kind === 'object') {
     sfx.fail();
-    setStatus(`That looks like a <em>${esc(LABELS[v.object])}</em>, not an animal.`);
-    setTimeout(unfreeze, 1800);
+    log(`[err] non-fauna object: <b>${esc(snake(LABELS[v.object]))}</b> · conf=${conf(v.objectScore)}`, 'err');
+    setTimeout(() => { unfreeze(); idle(); }, 1800);
   } else {
     sfx.fail();
-    setStatus('No animal detected. Move closer and hold steady.');
-    setTimeout(unfreeze, 1800);
+    log('[err] no fauna signature · move closer, hold steady', 'err');
+    setTimeout(() => { unfreeze(); idle(); }, 1800);
   }
 }
 
-function showChoices(options, text, { onNone } = {}) {
+const resetScanner = () => { unfreeze(); idle(); };
+
+function showChoices(options, text) {
   const body = openSheet(`<article class="plate">
-      <div class="plate-caption"><span>Field identification</span></div>
-      <span class="banner blush">Specimen unclear</span>
-      <h2>Which one is it?</h2>
-      <p class="plate-text" style="margin-top:12px">${esc(text)}</p>
+      <div class="plate-caption"><span>MANUAL <b>IDENTIFICATION</b></span></div>
+      <span class="banner warn">⚠ SIGNAL UNCLEAR</span>
+      <h2 data-decode>SELECT MATCH</h2>
+      <p class="comment" style="margin-top:12px">/* ${esc(text)} */</p>
       <div class="choices">${options.map((o, i) => {
         const known = state().caught[o.entry.k];
         return `<button type="button" class="choice" data-i="${i}">
           <span class="em">${o.entry.e}</span>
-          <span><b>${esc(o.entry.n)}</b><i>${known ? 'Already in your album' : 'New for your album'}</i></span>
+          <span><b>${esc(o.entry.n)}</b><i>${known ? 'record exists' : 'new signature'}</i></span>
           <span class="pct">${Math.max(1, Math.round(o.score * 100))}%</span></button>`;
       }).join('')}</div>
-      <div class="actions"><button type="button" class="btn ghost" data-act="none">None of these — scan again</button></div>
-    </article>`, { onClose: () => { unfreeze(); setStatus('Point at an animal and press <em>scan</em>.'); } });
+      <div class="actions"><button type="button" class="btn ghost" data-act="none">None of these · rescan</button></div>
+    </article>`, { onClose: resetScanner });
   body.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('.choice');
     if (btn) {
       const o = options[Number(btn.dataset.i)];
       onSheetClose = null;
+      log(`[ok] manual id <b>${snake(o.entry.s)}</b>`, 'ok');
       await register(o.entry, o.form, options.filter((a) => a !== o));
     } else if (ev.target.closest('[data-act="none"]')) {
-      if (onNone) onNone();
       closeSheet();
     }
   });
@@ -443,31 +524,31 @@ async function register(e, form, alternatives = []) {
   if (isNew) {
     sfx.success();
     if (navigator.vibrate) navigator.vibrate([30, 40, 60]);
-    setStatus(`<em>${esc(e.n)}</em> registered in your album!`);
+    log(`[ok] registered #${pad(e.no)} ${esc(e.n)} · +${RARITY[e.r].value}xp`, 'ok');
   } else {
     sfx.again();
-    setStatus(`${esc(e.n)} — already registered.`);
+    log(`[ok] record exists #${pad(e.no)} · sightings=${rec.count}`, 'ok');
   }
 
   const banner = isNew
-    ? `<span class="banner">New specimen registered</span>`
-    : `<span class="banner soft">Already in album · seen ×${rec.count}</span>`;
+    ? '<span class="banner new">▲ NEW SPECIMEN REGISTERED</span>'
+    : `<span class="banner soft">● RECORD EXISTS · SIGHTING ×${rec.count}</span>`;
   const extra = [];
-  if (newForm && !isNew) extra.push(`New form: <b>${esc(title(LABELS[form]))}</b>`);
-  if (setDone) extra.push(`Sheet complete: <b>${esc(setOf(e).name)}</b>!`);
-  const note = extra.length ? extra.join(' · ') : '';
+  if (newForm && !isNew) extra.push(`&gt; new form unlocked: <b>${esc(snake(LABELS[form]))}</b>`);
+  if (setDone) extra.push(`&gt; sector secured: <b>${esc(setOf(e).name)}</b>`);
 
-  const body = openSheet(`${plateHTML(e, { banner, note, slam: isNew })}
+  const body = openSheet(`${plateHTML(e, { banner, note: extra.join('<br>'), slam: isNew, typing: true })}
     <div class="actions">
-      <button type="button" class="btn" data-act="speak"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>Read aloud</button>
-      ${isNew ? '' : '<button type="button" class="btn" data-act="photo">Use this photo</button>'}
+      ${speakBtn}
+      ${isNew ? '' : '<button type="button" class="btn" data-act="photo">Overwrite image</button>'}
       <button type="button" class="btn primary" data-close>Continue</button>
     </div>
-    <div class="subtle-row"><button type="button" class="link" data-act="wrong">Not a ${esc(e.n.toLowerCase())}?</button></div>`,
-  { onClose: () => { unfreeze(); setStatus('Point at an animal and press <em>scan</em>.'); } });
+    <div class="subtle-row"><button type="button" class="link" data-act="wrong">misidentified? not a ${esc(e.n.toLowerCase())}</button></div>`,
+  { onClose: resetScanner });
 
+  typeOut($('.dex-text .typed', body), e.t);
   if (isNew) setTimeout(() => speak(`${e.n}. ${e.t}`), 700);
-  if (setDone) setTimeout(() => toast(`🎉 ${setOf(e).name} sheet complete!`), 1200);
+  if (setDone) setTimeout(() => toast(`SECTOR SECURED · ${setOf(e).name.toUpperCase()}`), 1200);
 
   body.addEventListener('click', async (ev) => {
     const act = ev.target.closest('[data-act]');
@@ -479,7 +560,7 @@ async function register(e, form, alternatives = []) {
       await store.putPhoto(e.k, blob);
       store.save();
       act.disabled = true;
-      act.textContent = 'Stamp updated';
+      act.textContent = 'Image updated';
       hydratePhotos(body);
       refreshCounts();
     }
@@ -489,11 +570,12 @@ async function register(e, form, alternatives = []) {
       store.save();
       refreshCounts();
       stopSpeaking();
+      log(`[warn] registration #${pad(e.no)} rolled back`, 'warn');
       if (alternatives.length) {
-        showChoices(alternatives, `Registration of ${e.n} undone. Was it one of these?`);
+        showChoices(alternatives, `Registration of ${e.n} rolled back. Was it one of these?`);
       } else {
         closeSheet();
-        toast(`Registration undone`);
+        toast('Registration rolled back');
       }
     }
   });
@@ -505,9 +587,8 @@ function points() { return Object.keys(state().caught).reduce((sum, k) => sum + 
 function rankFor(n) { let r = RANKS[0]; for (const x of RANKS) if (n >= x[0]) r = x; return r; }
 
 function refreshCounts() {
-  const n = caughtCount();
-  $('#count-num').textContent = n;
-  $('#count-total').textContent = `/ ${ENTRIES.length}`;
+  $('#count-num').textContent = pad(caughtCount());
+  $('#count-total').textContent = `/ ${ENTRIES.length} SPECIMENS`;
   renderRecent();
   if (currentTab === 'album') renderAlbum();
   if (currentTab === 'passport') renderPassport();
@@ -529,12 +610,13 @@ function renderAlbum() {
   const s = state();
   const n = caughtCount();
   const done = SETS.filter((set) => set.entries.every((e) => s.caught[e.k])).length;
-  $('#album-pct').textContent = Math.floor((n / ENTRIES.length) * 100);
+  const pct = (n / ENTRIES.length) * 100;
+  $('#album-pct').textContent = pct > 0 && pct < 10 ? pct.toFixed(1) : Math.floor(pct);
   $('#album-bar').style.width = `${(n / ENTRIES.length) * 100}%`;
-  $('#album-sub').textContent = `${n} of ${ENTRIES.length} stamps collected · ${done} of ${SETS.length} sheets complete`;
+  $('#album-sub').textContent = `> ${n}/${ENTRIES.length} specimens indexed · ${done}/${SETS.length} sectors secured`;
 
   const chip = (id, label, got, total) => `<button type="button" class="chip${got === total && id !== 'all' ? ' done' : ''}" role="tab" data-set="${id}" aria-selected="${albumFilter === id}">${label} <small>${got}/${total}</small></button>`;
-  $('#chips').innerHTML = chip('all', 'All sheets', n, ENTRIES.length) + SETS.map((set) => {
+  $('#chips').innerHTML = chip('all', 'ALL', n, ENTRIES.length) + SETS.map((set) => {
     const got = set.entries.filter((e) => s.caught[e.k]).length;
     return chip(set.id, `${set.icon} ${esc(set.name)}`, got, set.entries.length);
   }).join('');
@@ -545,8 +627,8 @@ function renderAlbum() {
     const complete = got === set.entries.length;
     return `<section class="sheet-section">
       <div class="sheet-head">
-        <div><h2>${set.icon} ${esc(set.name)}</h2><p>${complete ? 'Every stamp collected' : `${set.entries.length - got} still to find`}</p></div>
-        ${complete ? '<span class="seal">Sheet complete</span>' : `<span class="frac">${got}<small style="font-size:.6em;color:var(--ink-2)">/${set.entries.length}</small></span>`}
+        <div><small>SECTOR ${setIndex(set)}</small><h2>${set.icon} ${esc(set.name)}</h2><p>${complete ? 'all signatures captured' : `${set.entries.length - got} signatures remaining`}</p></div>
+        ${complete ? '<span class="seal">✓ SECURED</span>' : `<span class="frac">${String(got).padStart(2, '0')}<small>/${set.entries.length}</small></span>`}
       </div>
       <div class="stamp-grid">${set.entries.map((e) => stampHTML(e)).join('')}</div>
     </section>`;
@@ -557,77 +639,92 @@ function renderAlbum() {
 $('#chips').addEventListener('click', (ev) => {
   const c = ev.target.closest('.chip');
   if (!c) return;
+  sfx.click();
   albumFilter = c.dataset.set;
   renderAlbum();
-  c.scrollIntoView?.({ inline: 'center', block: 'nearest' });
+  const sel = $(`.chip[data-set="${albumFilter}"]`);
+  sel?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
 });
+
+function operatorId() {
+  const s = state();
+  if (!s.opId) {
+    s.opId = Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase().padStart(6, '0');
+    store.save();
+  }
+  return s.opId;
+}
 
 function renderPassport() {
   const s = state();
   const n = caughtCount();
-  const [, rankName, rankSci] = rankFor(n);
+  const [floor, rankName] = rankFor(n);
   const next = RANKS.find((r) => r[0] > n);
   $('#pts').textContent = points();
-  $('#rank-sci').textContent = rankSci;
+  $('#rank-sub').textContent = `// clearance: ${rankName.toLowerCase()}`;
   const byRarity = [1, 2, 3, 4].map((r) => {
     const all = ENTRIES.filter((e) => e.r === r);
     return { r, total: all.length, got: all.filter((e) => s.caught[e.k]).length };
   });
   const forms = Object.values(s.caught).reduce((a, rec) => a + (rec.forms ? rec.forms.length : 0), 0);
-  const rColor = { 1: 'var(--r1)', 2: 'var(--r2)', 3: 'var(--r3)', 4: 'var(--r4)' };
+  const rColor = { 1: 'var(--r1)', 2: 'var(--r2)', 3: 'var(--r3)', 4: 'linear-gradient(90deg, var(--blush), var(--mint), var(--coral))' };
 
   $('#passport').innerHTML = `
     <section class="card idcard">
-      <label for="collector-name">Collector</label>
-      <input id="collector-name" maxlength="28" placeholder="Your name" value="${esc(s.name)}" autocomplete="nickname">
-      <div class="rank">${rankName}<small>${next ? `${next[0] - n} more to become ${next[1]}` : 'Every stamp collected. Legendary.'}</small></div>
-      <div class="next-rank"><span style="width:${next ? Math.round((n - rankFor(n)[0]) / (next[0] - rankFor(n)[0]) * 100) : 100}%"></span></div>
+      <div class="id-top"><span>OPERATOR ID</span><b>OP-${operatorId()}</b></div>
+      <label for="collector-name">CALLSIGN</label>
+      <input id="collector-name" maxlength="24" placeholder="enter callsign" value="${esc(s.name)}" autocomplete="nickname" spellcheck="false">
+      <div class="rank">CLEARANCE: <b>${rankName.toUpperCase()}</b>
+        <small>${next ? `&gt; ${next[0] - n} more specimens to ${next[1].toLowerCase()}` : '&gt; database complete. legendary.'}</small></div>
+      <div class="next-rank"><span style="width:${next ? Math.round(((n - floor) / (next[0] - floor)) * 100) : 100}%"></span></div>
       <div class="stats">
-        <div><b>${n}</b><span>Species</span></div>
-        <div><b>${forms}</b><span>Forms seen</span></div>
-        <div><b>${s.scans}</b><span>Scans</span></div>
+        <div><b>${pad(n)}</b><span>Species</span></div>
+        <div><b>${pad(forms)}</b><span>Forms</span></div>
+        <div><b>${pad(s.scans)}</b><span>Scans</span></div>
       </div>
+      <div class="barcode" aria-hidden="true"></div>
     </section>
 
     <section class="card">
-      <h3>Sheet medals</h3>
+      <h3>Sector badges</h3>
       <div class="medals">${SETS.map((set) => {
         const got = set.entries.filter((e) => s.caught[e.k]).length;
         const pct = Math.round((got / set.entries.length) * 100);
-        return `<div class="medal${got === set.entries.length ? ' done' : ''}"><div class="disc" style="--p:${pct}"><span>${set.icon}</span></div>${esc(set.name)}</div>`;
+        return `<div class="medal${got === set.entries.length ? ' done' : ''}"><div class="hex" style="--p:${pct}"><span>${set.icon}</span></div>${esc(set.name)}</div>`;
       }).join('')}</div>
     </section>
 
     <section class="card">
-      <h3>By rarity</h3>
-      <div class="rarity-rows">${byRarity.map((x) => `<div class="rarity-row"><span>${RARITY[x.r].name}</span>
+      <h3>Rarity index</h3>
+      <div class="rarity-rows">${byRarity.map((x) => `<div class="rarity-row"><span>${RARITY[x.r].name.toUpperCase()}</span>
         <span class="bar"><span style="width:${(x.got / x.total) * 100}%;background:${rColor[x.r]}"></span></span>
-        <span class="n">${x.got}/${x.total}</span></div>`).join('')}</div>
+        <span class="n">${pad(x.got)}/${pad(x.total)}</span></div>`).join('')}</div>
     </section>
 
     <section class="card">
-      <h3>Settings</h3>
-      <label class="toggle"><span>Read entries aloud<small>The WildDex voice narrates new discoveries</small></span>
+      <h3>System config</h3>
+      <label class="toggle"><span>voice_synthesis<small>Narrate new registrations aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
-      <label class="toggle"><span>Sound effects<small>Scanner blips and registration chimes</small></span>
+      <label class="toggle"><span>audio_fx<small>Scanner blips and registration tones</small></span>
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
     </section>
 
     <section class="card">
-      <h3>Backup</h3>
-      <p class="about">Your album lives only on this device. Save a backup file to move it to a new phone.</p>
+      <h3>Data backup</h3>
+      <p class="about">Your database lives only on this device. Export a backup file to move it to a new phone.</p>
       <div class="btn-row">
-        <button type="button" class="btn small" data-act="export">Save backup</button>
-        <label class="btn small">Restore backup<input type="file" accept="application/json,.json" data-act="import" hidden></label>
-        <button type="button" class="btn small ghost" data-act="reset">Reset album</button>
+        <button type="button" class="btn small" data-act="export">Export</button>
+        <label class="btn small">Import<input type="file" accept="application/json,.json" data-act="import" hidden></label>
+        <button type="button" class="btn small ghost" data-act="reset">Wipe database</button>
       </div>
     </section>
 
     <section class="card about">
-      <h3>About the scanner</h3>
-      <p>Recognition runs entirely on your phone with a MobileNet image model — photos never leave your device, and scanning works offline once the model has loaded.</p>
-      <p>It knows ${ENTRIES.length} kinds of animals. It works best with a clear, close, well-lit view of one animal. Some everyday animals — like pigeons, crows, deer and giraffes — aren't in the model's vocabulary yet.</p>
-      <p><button type="button" class="link" data-act="intro">Show the welcome guide again</button></p>
+      <h3>System info</h3>
+      <p><span class="prompt">$</span> cat /sys/scanner.txt</p>
+      <p>Recognition runs entirely on this device with a MobileNet v2 neural net — images never leave your phone, and the scanner works offline once the core has loaded.</p>
+      <p>${ENTRIES.length} species signatures across ${SETS.length} sectors. Best results: one animal, close, well lit. Some common animals — pigeons, crows, deer, giraffes — aren't in the net's vocabulary yet.</p>
+      <p><button type="button" class="link" data-act="intro">run wilddex --help</button></p>
     </section>`;
 }
 
@@ -647,7 +744,7 @@ $('#passport').addEventListener('change', async (ev) => {
   if (t.dataset.act === 'import' && t.files[0]) {
     try {
       await store.importBackup(await t.files[0].text());
-      toast('Album restored');
+      toast('DATABASE RESTORED');
       refreshCounts();
       renderPassport();
     } catch (err) {
@@ -663,16 +760,16 @@ $('#passport').addEventListener('click', async (ev) => {
     const json = await store.exportBackup();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    a.download = `wilddex-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `wilddex-backup-${isoDate(Date.now())}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
   if (act.dataset.act === 'reset') {
-    if (confirm('Remove every stamp from your album? This can\'t be undone (unless you saved a backup).')) {
+    if (confirm('Wipe every specimen from your database? This can\'t be undone (unless you exported a backup).')) {
       await store.resetAll();
-      toast('Album reset');
+      toast('DATABASE WIPED');
       refreshCounts();
       renderPassport();
     }
@@ -689,6 +786,7 @@ document.addEventListener('click', (ev) => {
 // ---------------------------------------------------------------- tabs
 let currentTab = 'scan';
 function showTab(tab) {
+  const changed = tab !== currentTab;
   currentTab = tab;
   $$('.tabs button').forEach((b) => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
@@ -702,12 +800,14 @@ function showTab(tab) {
   }
   if (tab === 'album') renderAlbum();
   if (tab === 'passport') renderPassport();
-  window.scrollTo({ top: 0 });
+  const view = $(`.view[data-view="${tab}"]`);
+  $$('[data-decode]', view).forEach((el) => decode(el));
+  if (changed) window.scrollTo({ top: 0 });
   try { sessionStorage.setItem('wilddex.tab', tab); } catch { /* ignore */ }
 }
 $('.tabs').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-tab]');
-  if (b) showTab(b.dataset.tab);
+  if (b) { sfx.click(); showTab(b.dataset.tab); }
 });
 
 document.addEventListener('visibilitychange', () => {
@@ -720,6 +820,7 @@ $('#btn-camera').addEventListener('click', startCamera);
 $('#btn-scan').addEventListener('click', () => runScan('camera'));
 $('#btn-flip').addEventListener('click', () => {
   facing = facing === 'environment' ? 'user' : 'environment';
+  sfx.click();
   if (stream) startCamera();
 });
 $('#file').addEventListener('change', async (ev) => {
@@ -729,28 +830,66 @@ $('#file').addEventListener('change', async (ev) => {
   try {
     await drawFileToFreeze(file);
   } catch {
-    toast('Could not open that image');
+    log('[err] could not decode image', 'err');
     return;
   }
-  runScan('file');
+  runScan('image');
 });
 
-// ---------------------------------------------------------------- onboarding
+// ---------------------------------------------------------------- clock
+function tickClock() {
+  const d = new Date();
+  $('#clock').textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, '0')).join(':');
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ---------------------------------------------------------------- onboarding & boot
 function showIntro() {
   openSheet(`<article class="plate">
-      <div class="plate-caption"><span>Field guide</span><span>No. 000</span></div>
-      <h2>WildDex</h2>
-      <div class="plate-sci"><i>Fauna collectoria</i></div>
+      <div class="plate-caption"><span>$ <b>wilddex --help</b></span></div>
+      <h2 data-decode>WILDDEX</h2>
+      <div class="plate-sci"><i>field scanner for real-world fauna</i><span>v2.6</span></div>
       <ol class="intro-steps">
-        <li><div><b>Scan real animals</b><span>Point your camera at a pet, a bird in the park, a bug in the garden or a lion at the zoo — or upload a photo.</span></div></li>
-        <li><div><b>Unlock their entry</b><span>Each new species is stamped into your album with your own photo, its description and a fun fact.</span></div></li>
-        <li><div><b>Complete the sheets</b><span>${ENTRIES.length} stamps across ${SETS.length} sheets, from backyard birds to legendary relics. Rarer finds are worth more points.</span></div></li>
+        <li><div><b>Scan</b><span>Aim the optics at a pet, a bird in the park, a bug in the garden or a lion at the zoo — or feed it a photo.</span></div></li>
+        <li><div><b>Register</b><span>Each new species is decrypted and stamped into your database with your image, its dex entry and a data file.</span></div></li>
+        <li><div><b>Collect</b><span>${ENTRIES.length} specimen stamps across ${SETS.length} sectors — from backyard birds to legendary relics. Rarer finds earn more XP.</span></div></li>
       </ol>
-      <p class="about">Everything runs on your device. Nothing is uploaded.</p>
-      <div class="actions"><button type="button" class="btn primary" data-close>Start collecting</button></div>
+      <p class="comment">/* all processing is on-device. nothing is uploaded. */</p>
+      <div class="actions"><button type="button" class="btn primary" data-close>&gt; Start collecting</button></div>
     </article>`, {
     onClose: () => { state().onboarded = true; store.save(); },
   });
+}
+
+async function bootSequence() {
+  let seen = false;
+  try { seen = sessionStorage.getItem('wilddex.booted') === '1'; sessionStorage.setItem('wilddex.booted', '1'); } catch { /* ignore */ }
+  if (seen || reducedMotion()) return;
+  const boot = $('#boot');
+  const pre = $('#boot-log');
+  boot.hidden = false;
+  let skip = false;
+  boot.addEventListener('click', () => { skip = true; }, { once: true });
+  const n = caughtCount();
+  const lines = [
+    '<span class="hl">WILDDEX_OS v2.6</span> — fauna recognition unit',
+    `<span class="ok">[ok]</span> specimen db ...... ${ENTRIES.length} signatures`,
+    `<span class="ok">[ok]</span> operator album ... ${n} registered`,
+    `<span class="ok">[ok]</span> optics ........... calibrated`,
+    `<span class="ok">[ok]</span> neural core ...... standby`,
+    `<span class="t">&gt; welcome${state().name ? ` back, ${esc(snake(state().name))}` : ', operator'}</span>`,
+  ];
+  for (const l of lines) {
+    if (skip) break;
+    pre.innerHTML += `${l}\n`;
+    tone(1400, 0, 0.02, 'square', 0.012);
+    await sleep(170);
+  }
+  if (!skip) await sleep(350);
+  boot.classList.add('out');
+  await sleep(350);
+  boot.hidden = true;
 }
 
 // ---------------------------------------------------------------- boot
@@ -758,6 +897,9 @@ async function boot() {
   let tab = 'scan';
   try { tab = sessionStorage.getItem('wilddex.tab') || 'scan'; } catch { /* ignore */ }
   refreshCounts();
+  log('WILDDEX_OS v2.6 · on-device mode', 'cmd');
+  idle();
+  await bootSequence();
   showTab(tab);
 
   // Re-open the camera automatically if the user already granted it.

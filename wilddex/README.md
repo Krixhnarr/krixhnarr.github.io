@@ -15,7 +15,8 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   "form".
 - **Storage**: progress in `localStorage`, stamp photos in IndexedDB, with
   backup/restore on the Passport screen.
-- **Palette**: from the *Diaethria neglecta* plate — `#F3F8F5`, `#F5B7B2`,
+- **Look**: futuristic HUD / terminal UI on near-black, with neon accents from
+  the *Diaethria neglecta* butterfly palette — `#F3F8F5`, `#F5B7B2`,
   `#FF7972`, `#434448`.
 
 Plain static files, no build step. When changing app files, bump `VERSION`

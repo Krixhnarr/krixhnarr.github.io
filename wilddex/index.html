@@ -5,26 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WildDex</title>
   <meta name="description" content="Scan real animals with your camera and collect them in a stamp album.">
-  <meta name="theme-color" content="#F3F8F5">
+  <meta name="theme-color" content="#0B0C0F">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="app">
     <header class="topbar">
+      <div class="sysline">
+        <span><i class="led"></i>WILDDEX_OS v2.6</span>
+        <span id="clock">--:--:--</span>
+        <span>NET:LOCAL</span>
+      </div>
       <nav class="tabs" aria-label="Sections">
-        <button type="button" data-tab="scan" aria-current="page">Scan</button>
-        <span aria-hidden="true">|</span>
-        <button type="button" data-tab="album">Album</button>
-        <span aria-hidden="true">|</span>
-        <button type="button" data-tab="passport">Passport</button>
+        <button type="button" data-tab="scan" aria-current="page"><small>01</small>Scan</button>
+        <button type="button" data-tab="album"><small>02</small>Database</button>
+        <button type="button" data-tab="passport"><small>03</small>Operator</button>
       </nav>
     </header>
 
@@ -33,77 +37,92 @@
       <section id="view-scan" class="view" data-view="scan">
         <div class="masthead">
           <div>
-            <h1 class="display">WildDex</h1>
-            <p class="sci">Fauna collectoria</p>
+            <p class="path">~/wilddex/scanner</p>
+            <h1 class="display" data-decode>WILDDEX</h1>
+            <p class="sub">// fauna recognition unit</p>
           </div>
-          <p class="big-count" aria-label="Animals registered"><span id="count-num">0</span><small id="count-total">/ 0</small></p>
+          <div class="counter" aria-label="Animals registered">
+            <b id="count-num">000</b>
+            <span id="count-total">/ 000 SPECIMENS</span>
+          </div>
         </div>
 
         <div class="viewfinder" id="viewfinder">
           <video id="video" playsinline muted></video>
           <canvas id="freeze" width="448" height="448" aria-hidden="true"></canvas>
-          <svg class="rings" viewBox="0 0 100 100" aria-hidden="true">
-            <ellipse cx="50" cy="50" rx="44" ry="44" />
-            <ellipse cx="50" cy="50" rx="34" ry="34" />
-            <ellipse cx="50" cy="50" rx="24" ry="24" class="inner" />
-            <circle cx="44" cy="50" r="1.6" class="dot" />
-            <circle cx="56" cy="50" r="1.6" class="dot" />
+          <div class="vf-grid" aria-hidden="true"></div>
+          <svg class="hud" viewBox="0 0 100 100" aria-hidden="true">
+            <g class="ticks"><circle cx="50" cy="50" r="46" /></g>
+            <g class="rings">
+              <circle cx="50" cy="50" r="38" />
+              <circle cx="50" cy="50" r="28" />
+              <circle cx="50" cy="50" r="18" />
+            </g>
+            <circle cx="44" cy="50" r="1.4" class="dot" />
+            <circle cx="56" cy="50" r="1.4" class="dot" />
+            <path class="cross" d="M50 6v8M50 86v8M6 50h8M86 50h8" />
+            <path class="brackets" d="M3 13V3h10M87 3h10v10M97 87v10H87M13 97H3V87" />
           </svg>
+          <div class="readout tl"><span id="rec">○ STBY</span></div>
+          <div class="readout tr">AF·AE</div>
+          <div class="readout bl" id="lens">LENS:REAR</div>
+          <div class="readout br">224×224·TTA3</div>
           <div class="sweep" aria-hidden="true"></div>
           <div class="vf-overlay" id="vf-overlay">
-            <p class="vf-title">Scanner is resting</p>
-            <p class="vf-text" id="vf-text">Turn on the camera, or upload a photo of an animal.</p>
-            <button type="button" class="btn primary" id="btn-camera">Turn on camera</button>
+            <p class="vf-title">&gt; SCANNER OFFLINE<span class="caret"></span></p>
+            <p class="vf-text" id="vf-text">Initialize the camera, or feed the scanner a photo.</p>
+            <button type="button" class="btn primary" id="btn-camera">[ Initialize camera ]</button>
           </div>
         </div>
 
-        <p class="status" id="status" role="status" aria-live="polite">Point at an animal and press scan.</p>
-        <div class="meter" id="meter" hidden><span id="meter-bar"></span></div>
+        <div class="term" id="term" role="log" aria-live="polite" aria-label="Scanner log"></div>
 
         <div class="controls">
-          <label class="round-btn" title="Scan a photo from your gallery">
+          <label class="side-btn" title="Scan a photo from your gallery">
             <input type="file" accept="image/*" id="file" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
-            <span class="sr">Upload photo</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+            <span>IMG</span>
           </label>
           <button type="button" class="scan-btn" id="btn-scan" aria-label="Scan">
-            <span class="scan-ring"></span><span class="scan-label">Scan</span>
+            <span class="scan-orbit"></span><span class="scan-core"></span><span class="scan-label">SCAN</span>
           </button>
-          <button type="button" class="round-btn" id="btn-flip" title="Switch camera">
+          <button type="button" class="side-btn" id="btn-flip" title="Switch camera">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h11l-3-3M20 16H9l3 3"/></svg>
-            <span class="sr">Switch camera</span>
+            <span>FLIP</span>
           </button>
         </div>
 
         <section class="recent" id="recent-wrap" hidden>
-          <h2 class="kicker">Recently registered</h2>
+          <h2 class="kicker">// recent_registrations</h2>
           <div class="recent-strip" id="recent"></div>
         </section>
       </section>
 
-      <!-- ALBUM -->
+      <!-- DATABASE -->
       <section id="view-album" class="view" data-view="album" hidden>
         <div class="masthead">
           <div>
-            <h1 class="display">Album</h1>
-            <p class="sci">Philatelia naturalis</p>
+            <p class="path">~/wilddex/database</p>
+            <h1 class="display" data-decode>DATABASE</h1>
+            <p class="sub">// specimen stamp album</p>
           </div>
-          <p class="big-count"><span id="album-pct">0</span><small>%</small></p>
+          <div class="counter"><b id="album-pct">0</b><span>% INDEXED</span></div>
         </div>
-        <div class="progress"><span id="album-bar"></span></div>
+        <div class="segbar"><span id="album-bar"></span></div>
         <p class="album-sub" id="album-sub"></p>
-        <div class="chips" id="chips" role="tablist" aria-label="Album sheets"></div>
+        <div class="chips" id="chips" role="tablist" aria-label="Album sectors"></div>
         <div id="sheets"></div>
       </section>
 
-      <!-- PASSPORT -->
+      <!-- OPERATOR -->
       <section id="view-passport" class="view" data-view="passport" hidden>
         <div class="masthead">
           <div>
-            <h1 class="display">Passport</h1>
-            <p class="sci" id="rank-sci">Collector novus</p>
+            <p class="path">~/wilddex/operator</p>
+            <h1 class="display" data-decode>OPERATOR</h1>
+            <p class="sub" id="rank-sub">// clearance: rookie</p>
           </div>
-          <p class="big-count"><span id="pts">0</span><small>pts</small></p>
+          <div class="counter"><b id="pts">0</b><span>XP</span></div>
         </div>
         <div id="passport"></div>
       </section>
@@ -113,12 +132,11 @@
   <div class="sheet" id="sheet" hidden>
     <div class="sheet-backdrop" data-close></div>
     <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Details" tabindex="-1">
-      <button type="button" class="sheet-close" data-close aria-label="Close">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
+      <button type="button" class="sheet-close" data-close aria-label="Close">[ esc ]</button>
       <div class="sheet-body" id="sheet-body"></div>
     </div>
   </div>
+  <div class="boot" id="boot" hidden aria-hidden="true"><pre id="boot-log"></pre></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>
