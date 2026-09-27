@@ -341,9 +341,9 @@ let busy = false;
 
 async function startCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    $('#vf-text').textContent = 'No optics in this browser — feed the scanner a photo instead.';
+    $('#vf-text').textContent = 'This browser has no camera access. Open WildDex on a phone with a camera to scan animals.';
     $('#btn-camera').hidden = true;
-    log('[err] optics unavailable · fallback=photo', 'err');
+    log('[err] optics unavailable', 'err');
     return;
   }
   stopCamera();
@@ -359,6 +359,8 @@ async function startCamera() {
     const front = stream.getVideoTracks()[0].getSettings().facingMode === 'user';
     vf.classList.toggle('mirror', front);
     vf.classList.add('live');
+    const caps = stream.getVideoTracks()[0].getCapabilities?.() || {};
+    $('#btn-torch').disabled = !caps.torch;
     $('#rec').textContent = '● LIVE';
     $('#lens').textContent = `LENS:${front ? 'FRONT' : 'REAR'}`;
     log(`[ok] optics online · lens=${front ? 'front' : 'rear'}`, 'ok');
@@ -368,8 +370,8 @@ async function startCamera() {
     vf.classList.remove('live');
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     $('#vf-text').textContent = denied
-      ? 'Camera permission blocked. Allow it in browser settings, or feed the scanner a photo.'
-      : 'No camera found — feed the scanner a photo instead.';
+      ? 'Camera permission blocked. Allow camera access in your browser settings to scan animals.'
+      : 'No camera found. WildDex needs a camera to scan real animals.';
     log(`[err] optics ${denied ? 'permission denied' : 'not found'}`, 'err');
   }
 }
@@ -379,6 +381,8 @@ function stopCamera() {
   stream = null;
   video.srcObject = null;
   vf.classList.remove('live');
+  $('#btn-torch').disabled = true;
+  $('#btn-torch').setAttribute('aria-pressed', 'false');
   $('#rec').textContent = '○ STBY';
 }
 
@@ -390,19 +394,6 @@ function captureFrame() {
   if (vf.classList.contains('mirror')) { freezeCtx.translate(freeze.width, 0); freezeCtx.scale(-1, 1); }
   freezeCtx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, freeze.width, freeze.height);
   freezeCtx.restore();
-}
-
-async function drawFileToFreeze(file) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const side = Math.min(img.naturalWidth, img.naturalHeight);
-    freezeCtx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, freeze.width, freeze.height);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
 
 const canvasToBlob = (canvas, size = 360) => new Promise((resolve) => {
@@ -924,12 +915,15 @@ $('#btn-flip').addEventListener('click', () => {
   sfx.click();
   if (stream) startCamera();
 });
-$('#file').addEventListener('change', async (ev) => {
-  const file = ev.target.files[0];
-  ev.target.value = '';
-  if (!file || busy) return;
-  try { await drawFileToFreeze(file); } catch { log('[err] could not decode image', 'err'); return; }
-  runScan('photo');
+$('#btn-torch').addEventListener('click', async () => {
+  const track = stream && stream.getVideoTracks()[0];
+  if (!track) return;
+  const on = $('#btn-torch').getAttribute('aria-pressed') !== 'true';
+  try {
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+    $('#btn-torch').setAttribute('aria-pressed', String(on));
+    sfx.click();
+  } catch { log('[err] flashlight unavailable', 'err'); }
 });
 
 // ---------------------------------------------------------------- onboarding & boot
@@ -940,7 +934,7 @@ function showIntro() {
       <span class="sci">real-world animal card collector</span>
     </div>
     <ol class="intro-steps">
-      <li><div><b>Scan</b><span>Point the scanner at a real animal — a pet, a park bird, a garden bug, a zoo lion — or feed it a photo.</span></div></li>
+      <li><div><b>Scan</b><span>Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion. Cards only drop from live scans.</span></div></li>
       <li><div><b>Pull the card</b><span>New species drop a sealed card. Tap to decrypt it and add it to your binder.</span></div></li>
       <li><div><b>Level up</b><span>Scan the same animal again to level its card and boost its stats. Every sighting earns ◆ data shards.</span></div></li>
       <li><div><b>Complete</b><span>${ENTRIES.length} cards · ${TYPE_IDS.length} affinities · ${SETS.length} sectors. Clear daily orders, keep your streak, and spend shards to decrypt intel on cards you haven't found.</span></div></li>

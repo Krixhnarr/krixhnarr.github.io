@@ -166,6 +166,9 @@ img { display: block; max-width: 100%; }
 .side-btn { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; align-content: center; gap: 1px; border: 1.4px solid var(--line-2); background: var(--panel); font-size: 8.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--dim); transition: transform .15s, border-color .15s; }
 .side-btn:hover { border-color: var(--coral); color: var(--mint); }
 .side-btn:active { transform: scale(.94); }
+.side-btn:disabled { opacity: .35; cursor: default; }
+.side-btn[aria-pressed="true"] { border-color: var(--coral); color: var(--coral); box-shadow: var(--glow); }
+.side-btn[aria-pressed="true"] svg { stroke: var(--coral); }
 .side-btn svg { width: 20px; height: 20px; fill: none; stroke: var(--mint); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .scan-btn { position: relative; width: 98px; height: 98px; border-radius: 50%; border: 0; background: none; padding: 0; color: var(--bg); transition: transform .15s; }
 .scan-btn:active { transform: scale(.95); }

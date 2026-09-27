@@ -1,7 +1,7 @@
 {
   "name": "WildDex — Animal Collector",
   "short_name": "WildDex",
-  "description": "Scan real animals with your camera and collect them in a stamp album.",
+  "description": "Scan real animals with your camera and collect them as cards.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

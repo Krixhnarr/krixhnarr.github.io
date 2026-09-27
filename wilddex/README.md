@@ -1,7 +1,7 @@
 # WildDex
 
-A real-world collectible card game: scan animals with your phone camera (or a
-photo) and each new species drops a sealed card to decrypt and keep in your
+A real-world collectible card game: scan real animals with your phone camera and
+each new species drops a sealed card to decrypt and keep in your
 binder. Re-scan animals to level their cards, clear daily orders, keep a
 streak, and spend data shards to decrypt intel on cards you haven't found.
 
