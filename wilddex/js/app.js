@@ -457,14 +457,18 @@ async function runScan(source) {
     if (!stream) { await startCamera(); if (!stream) return; }
     warmModel().catch(() => {});
     log(`&gt; wilddex.scan --source=${source} --live`, 'cmd');
-    log('[..] depth sweep · slide phone sideways');
+    log('[..] depth sweep · slide phone left, then right');
 
     // 1) Depth sweep: record ~1.3 s while the player slides the phone.
     vf.classList.add('sweeping');
     $('#sweep-bar').style.width = '0%';
     let tick = 0;
     const frames = await recordSweep(video, {
-      onProgress: (p) => { $('#sweep-bar').style.width = `${p * 100}%`; if (tick++ % 3 === 0) tone(900 + p * 700, 0, 0.03, 'square', 0.015); },
+      onProgress: (p) => {
+        $('#sweep-bar').style.width = `${p * 100}%`;
+        $('#sweep-text').textContent = p < 0.5 ? 'Slide phone left' : 'Now slide right';
+        if (tick++ % 3 === 0) tone(p < 0.5 ? 900 + p * 400 : 1300 - (p - 0.5) * 400, 0, 0.03, 'square', 0.015);
+      },
     });
     vf.classList.remove('sweeping');
     if (!stream) return;
@@ -515,13 +519,22 @@ async function handleVerdict(v) {
     const d = v.depth;
     if (d.verdict === 'flat') {
       sfx.fail();
-      log(`[err] liveness failed · flat surface · ${d.off}/${d.tracks} depth points`, 'err');
+      log(`[err] liveness failed · flat surface · ${d.parallax || 0}/${d.tracks} depth points`, 'err');
       log('[err] photos, prints & screens can\'t be registered', 'err');
       toast('FLAT IMAGE DETECTED · SCAN A LIVE ANIMAL');
+    } else if (d.verdict === 'video') {
+      sfx.fail();
+      log(`[err] liveness failed · moving image on a flat screen · ${d.indep} pts`, 'err');
+      log('[err] videos on screens can\'t be registered', 'err');
+      toast('VIDEO ON A SCREEN DETECTED · SCAN A LIVE ANIMAL');
     } else if (d.verdict === 'still') {
       sfx.again();
-      log('[warn] no depth signal · slide the phone sideways while scanning', 'warn');
-      toast('SLIDE YOUR PHONE SIDEWAYS DURING THE SCAN');
+      log('[warn] no depth signal · slide the phone left, then right, while scanning', 'warn');
+      toast('SLIDE YOUR PHONE LEFT, THEN RIGHT');
+    } else if (d.verdict === 'oneway') {
+      sfx.again();
+      log('[warn] one-way motion · slide left AND back right to verify depth', 'warn');
+      toast('SLIDE LEFT, THEN BACK RIGHT');
     } else {
       sfx.again();
       log('[warn] too little detail to verify · move closer or add light', 'warn');
@@ -896,7 +909,7 @@ function renderProfile() {
     <section class="card-box about">
       <div class="box-head"><h3>About</h3></div>
       <p>Recognition runs entirely on your phone with a MobileNet v2 neural net — photos never leave your device, and scanning works offline once loaded.</p>
-      <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Each scan checks for real depth (parallax) or movement, so photos, prints and screens are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
+      <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Each scan checks for real depth that moves with your hand (parallax), so photos, prints, screens and videos are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
       <p>Card stats are game values. 3D animal art: Microsoft Fluent Emoji (MIT).</p>
       <p><button type="button" class="link" data-act="intro">How to play</button></p>
     </section>`;
@@ -1001,7 +1014,7 @@ function showIntro() {
       <span class="sci">real-world animal card collector</span>
     </div>
     <ol class="intro-steps">
-      <li><div><b>Scan</b><span>Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and slowly slide your phone sideways. Cards only drop for live 3D animals, never photos or screens.</span></div></li>
+      <li><div><b>Scan</b><span>Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and slowly slide your phone left, then right. Cards only drop for live 3D animals — never photos, screens or videos.</span></div></li>
       <li><div><b>Pull the card</b><span>New species drop a sealed card. Tap to decrypt it and add it to your binder.</span></div></li>
       <li><div><b>Level up</b><span>Scan the same animal again to level its card and boost its stats. Every sighting earns ◆ data shards.</span></div></li>
       <li><div><b>Complete</b><span>${ENTRIES.length} cards · ${TYPE_IDS.length} affinities · ${SETS.length} sectors. Clear daily orders, keep your streak, and spend shards to decrypt intel on cards you haven't found.</span></div></li>

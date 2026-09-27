@@ -1,5 +1,5 @@
-// Live-animal check: is the thing in front of the camera 3D (or moving on its
-// own), or a flat picture — a print, a photo, a screen?
+// Live-animal check: is the thing in front of the camera a real 3D scene, or
+// a picture on a flat surface — a print, a photo, a screen, a video?
 //
 // While the player slides the phone sideways, we record a short burst of
 // frames and track ~100 feature points through it. Every point on a flat
@@ -7,8 +7,11 @@
 // real scene breaks that: the animal and its background sit at different
 // depths (parallax), and a living animal moves by itself. So:
 //   - points that fit one homography        -> flat picture -> rejected
-//   - a solid group of points that don't    -> 3D / alive   -> accepted
-//   - hardly any motion at all              -> ask the player to move
+//   - points off that plane whose offset follows the player's left-right
+//     slide (parallax)                       -> real 3D      -> accepted
+//   - off-plane motion that ignores the slide -> a video playing on a
+//     flat screen                            -> rejected
+//   - hardly any motion / one way only       -> ask the player to slide
 
 const LONG = 256;        // analysis width (long side), px
 const PATCH = 4;         // 9x9 patches for tracking
@@ -30,7 +33,7 @@ export function grabGray(source, sw, sh, canvas) {
 }
 
 // Records `count` frames about `interval` ms apart from a playing <video>.
-export async function recordSweep(video, { count = 14, interval = 95, onProgress = () => {} } = {}) {
+export async function recordSweep(video, { count = 20, interval = 95, onProgress = () => {} } = {}) {
   const canvas = document.createElement('canvas');
   const frames = [];
   for (let i = 0; i < count; i++) {
@@ -217,47 +220,95 @@ function ransacH(src, dst, thresh, iters = 300) {
     if (cnt > bestIn) { bestIn = cnt; best = H; }
   }
   if (!best) return null;
-  // Refit on inliers, then measure residuals in pixels.
+  // Refit on inliers, then measure residual vectors in pixels.
   const inl = [];
   for (let i = 0; i < n; i++) { const p = project(best, S[i]); if (Math.hypot(p[0] - D[i][0], p[1] - D[i][1]) < t) inl.push(i); }
   const H = fitH(inl.map((i) => S[i]), inl.map((i) => D[i])) || best;
-  return src.map((_, i) => { const p = project(H, S[i]); return Math.hypot(p[0] - D[i][0], p[1] - D[i][1]) / nd.sc; });
+  const vec = src.map((_, i) => { const p = project(H, S[i]); return [(D[i][0] - p[0]) / nd.sc, (D[i][1] - p[1]) / nd.sc]; });
+  return { vec };
 }
 
 // ---------------------------------------------------------------- verdict
 export const RESID = 2.2;        // px at LONG=256: beyond tracking noise
 export const MIN_TRACKS = 14;
+const PARALLAX_CORR = 0.8;       // off-plane motion must follow the hand this closely
 
-export function analyseSweep(frames, { debug = false } = {}) {
+function pearson(a, b) {
+  const n = a.length;
+  let ma = 0; let mb = 0;
+  for (let i = 0; i < n; i++) { ma += a[i]; mb += b[i]; }
+  ma /= n; mb /= n;
+  let sab = 0; let saa = 0; let sbb = 0;
+  for (let i = 0; i < n; i++) { const x = a[i] - ma; const y = b[i] - mb; sab += x * y; saa += x * x; sbb += y * y; }
+  return saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
+}
+
+function groupedCount(pts) {
+  let n = 0;
+  for (const p of pts) if (pts.filter((q) => q !== p && Math.hypot(q[0] - p[0], q[1] - p[1]) < 40).length >= 2) n++;
+  return n;
+}
+
+// Verdicts:
+//   live    real depth (parallax) that moves in step with the player's hand
+//   video   off-plane motion that ignores the hand: moving picture on a flat screen
+//   flat    everything moves as one flat surface: photo, print, still screen
+//   still   the phone barely moved — ask the player to slide it
+//   oneway  the phone moved one way only — ask for left *and* right
+//   texture too few trackable points — ask to get closer / add light
+export function analyseSweep(frames) {
   const tracks = track(frames);
-  const all = debug ? corners(frames[0].g, frames[0].w, frames[0].h) : null;
   if (tracks.length < MIN_TRACKS) return { verdict: 'texture', tracks: tracks.length };
+  const T = tracks[0].length;
   const first = tracks.map((t) => t[0]);
-  const disp = tracks.map((t) => Math.hypot(t[t.length - 1][0] - t[0][0], t[t.length - 1][1] - t[0][1])).sort((a, b) => a - b);
-  const median = disp[Math.floor(disp.length / 2)];
 
-  // Worst residual of each track against the best single-plane motion from
-  // frame 0 to every later frame.
-  const resid = tracks.map(() => 0);
-  for (let f = 2; f < tracks[0].length; f += 1) {
-    const r = ransacH(first, tracks.map((t) => t[f]), 1.2, 160);
-    if (r) r.forEach((v, i) => { if (v > resid[i]) resid[i] = v; });
+  // Residual of every point from the dominant plane motion, frame by frame.
+  const res = tracks.map(() => [[0, 0]]);
+  for (let f = 1; f < T; f++) {
+    const r = ransacH(first, tracks.map((t) => t[f]), 1.2, 140);
+    if (!r) { res.forEach((e) => e.push([0, 0])); continue; }
+    r.vec.forEach((v, i) => res[i].push(v));
   }
-  const off = resid.filter((r) => r > RESID).length;
-  const offShare = off / tracks.length;
 
-  // Points that don't fit the dominant flat motion must also be spatially
-  // grouped (an animal, a nearer object), not scattered tracking glitches.
-  const offPts = first.filter((_, i) => resid[i] > RESID);
-  let grouped = 0;
-  for (const p of offPts) if (offPts.filter((q) => q !== p && Math.hypot(q[0] - p[0], q[1] - p[1]) < 40).length >= 2) grouped++;
+  // Main direction of the hand's motion (from how all points moved), and the
+  // scene's motion profile along it: the median point displacement per frame.
+  let sxx = 0; let syy = 0; let sxy = 0;
+  for (const t of tracks) for (const [x, y] of t) { const dx = x - t[0][0]; const dy = y - t[0][1]; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+  const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const u = [Math.cos(ang), Math.sin(ang)];
+  const g = [];
+  for (let f = 0; f < T; f++) {
+    const d = tracks.map((t) => (t[f][0] - t[0][0]) * u[0] + (t[f][1] - t[0][1]) * u[1]).sort((a, b) => a - b);
+    g.push(d[Math.floor(d.length / 2)]);
+  }
+  const gMax = Math.max(...g); const gMin = Math.min(...g);
+  // How far things moved: 80th percentile of per-point travel, so a slow
+  // distant background doesn't hide a good sideways slide.
+  const travel = tracks.map((t) => { const a = t.map(([x, y]) => (x - t[0][0]) * u[0] + (y - t[0][1]) * u[1]); return Math.max(...a) - Math.min(...a); }).sort((a, b) => a - b);
+  const range = travel[Math.floor(travel.length * 0.8)];
+  const base = { tracks: tracks.length, range: +range.toFixed(1) };
+  if (range < 8) return { verdict: 'still', ...base };
+  // Did the motion reverse? (distance from the far end back towards the start)
+  const far = Math.abs(gMax - g[0]) > Math.abs(gMin - g[0]) ? gMax : gMin;
+  const back = Math.abs(far - g[T - 1]);
+  if (back < Math.max(1.5, 0.25 * (gMax - gMin))) return { verdict: 'oneway', ...base };
 
-  const live = off >= 6 && offShare >= 0.15 && grouped >= 5;
-  let verdict;
-  if (live) verdict = 'live';
-  else if (median < 4) verdict = 'still';   // nothing moved: can't tell yet
-  else verdict = 'flat';
-  const out = { verdict, tracks: tracks.length, median: +median.toFixed(1), offShare: +offShare.toFixed(2), off, grouped };
-  if (debug) { out.first = first; out.resid = resid; out.corners = all; }
-  return out;
+  const parallax = [];
+  const indep = [];
+  res.forEach((e, i) => {
+    const amp = Math.max(...e.map(([x, y]) => Math.hypot(x, y)));
+    if (amp <= RESID) return;
+    const along = e.map(([x, y]) => x * u[0] + y * u[1]);
+    const alongAmp = Math.max(...along.map(Math.abs));
+    const r = pearson(along, g);
+    if (Math.abs(r) >= PARALLAX_CORR && alongAmp >= 0.6 * amp) parallax.push(first[i]);
+    else indep.push(first[i]);
+  });
+  const pg = groupedCount(parallax);
+  const ig = groupedCount(indep);
+  const info = { ...base, parallax: parallax.length, pGrouped: pg, indep: indep.length, iGrouped: ig };
+
+  if (parallax.length >= 6 && pg >= 5 && parallax.length / tracks.length >= 0.08) return { verdict: 'live', ...info };
+  if (indep.length >= 10 && ig >= 8 && indep.length / tracks.length >= 0.08) return { verdict: 'video', ...info };
+  return { verdict: 'flat', ...info };
 }

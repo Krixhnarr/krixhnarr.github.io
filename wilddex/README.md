@@ -8,12 +8,13 @@ streak, and spend data shards to decrypt intel on cards you haven't found.
 Live at https://krixhnarr.github.io/wilddex/ — installable as an app
 (Add to Home Screen) and works offline after the first scan.
 
-- **Liveness — real animals only**: each scan records a ~1.3 s sweep while
-  the player slides the phone sideways. `js/parallax.js` tracks ~150 points
-  and checks whether they all fit one flat-surface motion (a photo, print or
-  screen) or show parallax / self-motion (a real 3D animal). Backed up by a
-  device/print classifier check and a bezel/print-margin detector
-  (`js/liveness.js`).
+- **Liveness — real animals only**: each scan records a ~1.9 s sweep while
+  the player slides the phone left, then right. `js/parallax.js` tracks ~150
+  points and removes the single flat-surface motion; what's left must be
+  parallax that follows the player's hand. Photos, prints and screens (all
+  flat) and videos on screens (their motion ignores the hand) are rejected.
+  Backed up by a device/print classifier check and a bezel/print-margin
+  detector (`js/liveness.js`).
 - **Recognition** runs on-device with MobileNet v2 (`model/`) via
   TensorFlow.js (`vendor/tf.min.js`). Nothing is uploaded.
 - **Collection**: 261 animal cards across 20 sectors (`js/dex-data.js`). Every
