@@ -9,7 +9,6 @@ import { recordSweep, analyseSweep } from './parallax.js';
 import { renderDots, startTwinkle, dotSVG } from './dotmatrix.js';
 import * as battle from './battle.js';
 import * as loot from './loot.js';
-import { pipSVG } from './pip.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -153,24 +152,6 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// Pip pops up with a line of dialogue (tap to dismiss).
-let pipTimer;
-function pipSay(text, mood = 'happy', ms = 4200) {
-  const el = $('#pip-toast');
-  el.innerHTML = `${pipSVG(mood, 'mini')}<p class="bubble">${text}</p>`;
-  el.hidden = false;
-  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
-  tone(1760, 0, 0.04, 'sine', 0.03); tone(2349, 0.06, 0.07, 'sine', 0.03);
-  clearTimeout(pipTimer);
-  pipTimer = setTimeout(hidePip, ms);
-}
-function hidePip() {
-  const el = $('#pip-toast');
-  el.classList.remove('show');
-  setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 300);
-}
-$('#pip-toast').addEventListener('click', () => { clearTimeout(pipTimer); hidePip(); });
-
 function flash(rarity = 0) {
   const f = document.createElement('div');
   f.className = `flash${rarity === 4 ? ' gold' : rarity === 5 ? ' holo' : ''}`;
@@ -280,7 +261,6 @@ function openSheet(html, { onClose } = {}) {
   body.innerHTML = html;
   if (sheet.hidden) lastFocus = document.activeElement;
   sheet.hidden = false;
-  document.body.classList.add('sheet-open');
   $('.sheet-panel', sheet).scrollTop = 0;
   $('.sheet-panel', sheet).focus({ preventScroll: true });
   hydratePhotos(body);
@@ -292,7 +272,6 @@ function closeSheet() {
   const sheet = $('#sheet');
   if (sheet.hidden) return;
   sheet.hidden = true;
-  document.body.classList.remove('sheet-open');
   $('#sheet-body').innerHTML = '';
   stopSpeaking();
   gyroTarget = null;
@@ -716,24 +695,24 @@ async function handleVerdict(v) {
       sfx.fail();
       log(`[err] liveness failed · flat surface · ${d.parallax || 0}/${d.tracks} depth points`, 'err');
       log('[err] photos, prints & screens can\'t be registered', 'err');
-      pipSay('Hmm… that looked <b>flat</b>, like a photo or screen. I can only log real, live animals!', 'sad');
+      toast('FLAT IMAGE DETECTED · SCAN A LIVE ANIMAL');
     } else if (d.verdict === 'video') {
       sfx.fail();
       log(`[err] liveness failed · moving image on a flat screen · ${d.indep} pts`, 'err');
       log('[err] videos on screens can\'t be registered', 'err');
-      pipSay('Nice try — that\'s a <b>video on a screen</b>. Let\'s find a real one!', 'sad');
+      toast('VIDEO ON A SCREEN DETECTED · SCAN A LIVE ANIMAL');
     } else if (d.verdict === 'still') {
       sfx.again();
       log('[warn] no depth signal · slide the phone left, then right, while scanning', 'warn');
-      pipSay('I need depth! <b>Slide your phone left, then right</b> while I scan.', 'idle');
+      toast('SLIDE YOUR PHONE LEFT, THEN RIGHT');
     } else if (d.verdict === 'oneway') {
       sfx.again();
       log('[warn] one-way motion · slide left AND back right to verify depth', 'warn');
-      pipSay('Almost! Slide <b>left and then back right</b> so I can see it in 3D.', 'idle');
+      toast('SLIDE LEFT, THEN BACK RIGHT');
     } else {
       sfx.again();
       log('[warn] too little detail to verify · move closer or add light', 'warn');
-      pipSay('Too blurry for me. <b>Move closer</b> or find more light.', 'sad');
+      toast('CAN\'T VERIFY · MOVE CLOSER OR ADD LIGHT');
     }
     setTimeout(resetScanner, 2200);
   } else if (v.kind === 'spoof') {
@@ -742,7 +721,7 @@ async function handleVerdict(v) {
       ? `[err] liveness failed · <b>${esc(snake(LABELS[v.spoof.label]))}</b> · conf=${conf(v.spoof.score)}`
       : `[err] liveness failed · <b>display_or_print_frame</b> detected`, 'err');
     log('[err] screens & prints can\'t be registered', 'err');
-    pipSay('That\'s a <b>screen or a print</b>. Real animals only, partner!', 'sad');
+    toast('SCREEN OR PRINT DETECTED · SCAN A REAL ANIMAL');
     setTimeout(resetScanner, 2200);
   } else if (v.kind === 'unsure') {
     sfx.again();
@@ -751,7 +730,6 @@ async function handleVerdict(v) {
   } else if (v.kind === 'object') {
     sfx.fail();
     log(`[err] not fauna: <b>${esc(snake(LABELS[v.object]))}</b> · conf=${conf(v.objectScore)}`, 'err');
-    pipSay(`That looks like a <b>${esc(LABELS[v.object].split(',')[0])}</b>, not an animal!`, 'idle');
     setTimeout(resetScanner, 1800);
   } else {
     sfx.fail();
@@ -895,13 +873,6 @@ async function register(e, form, alternatives = []) {
     popGain(`+${shards}◆`, stage, { delay: 350 });
     popGain(`+${xpGain} XP`, stage, { cls: 'xp', delay: 600 });
     setTimeout(() => $('.xpbar', body)?.classList.add('go'), 300);
-    const line = holoNew ? ['WHOA — a <b>holo</b>! Only about 1 in 40 scans finds one.', 'wow']
-      : isNew && e.r === 4 ? [`A <b>Legendary</b>! I've never seen a real ${esc(e.n.toLowerCase())} before!`, 'wow']
-        : isNew && e.r === 3 ? [`A <b>Rare</b> card! ${esc(e.n)} is a great find.`, 'wow']
-          : grade?.grade === 'S' ? ['Perfect sync! That sweep was <b>flawless</b>.', 'happy']
-            : !isNew && lvAfter > lvBefore ? [`${esc(e.n)} powered up to <b>LV ${lvAfter}</b>!`, 'happy']
-              : isNew ? [`${esc(e.n)} logged! That's card <b>#${caughtKeys().length}</b> in your binder.`, 'happy'] : null;
-    if (line) setTimeout(() => pipSay(...line), 1300);
   };
   const startDetail = () => {
     after.hidden = false;
@@ -1392,8 +1363,7 @@ function startBattle(kind) {
     if (won) { burst(res, 3); popGain(reward.credits ? `+${reward.credits}◆` : `+${reward.xp} XP`, res, { delay: 200 }); }
     const lastFoe = battle.active(b.foe);
     const counters = TYPE_IDS.filter((x) => battle.STRONG[x].includes(lastFoe.types[0])).map((x) => TYPES[x].name);
-    setTimeout(() => pipSay(won ? (kind === 'rival' && reward.credits ? 'We beat the rival! Same time tomorrow?' : 'Victory! Your squad is getting strong.')
-      : `Shake it off! Their ${esc(lastFoe.e.n)} is ${TYPES[lastFoe.types[0]].name} — try <b>${counters.join(', ').replace(/, ([^,]*)$/, ' or $1')}</b> cards.`, won ? 'happy' : 'sad'), 900);
+    if (!won) setTimeout(() => toast(`TIP: ${counters.join(' / ').toUpperCase()} BEAT ${TYPES[lastFoe.types[0]].name.toUpperCase()}`), 900);
     setTimeout(() => $('.xpbar', res)?.classList.add('go'), 250);
     res.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
   }
@@ -1740,7 +1710,6 @@ function crateFlow(free) {
       </div>`;
     r.hidden = false;
     if (res.dupe) popGain(`+${loot.DUPE_REFUND}◆`, r, { delay: 300 });
-    else if (res.r >= 3) setTimeout(() => pipSay(res.r === 4 ? 'A <b>Legendary</b> drop! Show that off.' : `Ooh, an <b>Epic</b> ${res.kind}!`, 'wow'), 900);
     refreshAll(true);
   };
   crate.addEventListener('click', tap);
@@ -1932,44 +1901,10 @@ const ICON = {
   scan: '<svg viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><circle cx="12" cy="12" r="3.5"/></svg>',
 };
 
-// An uncaught easy animal to tease, fixed for the day.
-function dailyTarget() {
-  const pool = ENTRIES.filter((e) => e.r <= 2 && !state().caught[e.k]);
-  return pool.length ? pool[game.hash(`target:${game.today()}`) % pool.length] : null;
-}
-
-function pipLines() {
-  const s = state();
-  const n = caughtKeys().length;
-  const name = esc(s.name || 'partner');
-  const lines = [];
-  if (!n) lines.push([`Hi ${name}! I'm <b>Pip</b>, your field drone. Point the camera at a real animal and we'll catch our first card!`, 'happy']);
-  if (s.locker?.crates) lines.push([`You've got <b>${s.locker.crates} supply crate${s.locker.crates > 1 ? 's' : ''}</b> waiting. Let's crack one open!`, 'wow']);
-  if (unclaimedMissions()) lines.push(['Orders complete! Your rewards are waiting in <b>Ops</b>.', 'happy']);
-  if (n) {
-    const r = battle.dailyRival(s);
-    if (!r.won) {
-      const lead = BY_KEY[r.keys[0]];
-      const t = AFFINITY[lead.k][0];
-      const counters = TYPE_IDS.filter((x) => battle.STRONG[x].includes(t)).map((x) => TYPES[x].name);
-      lines.push([`<b>${esc(r.name)}</b> leads with a ${esc(lead.n)} (${TYPES[t].name}). <b>${counters.join(', ').replace(/, ([^,]*)$/, ' or $1')}</b> cards hit it hard!`, 'idle']);
-    }
-  }
-  const streak = game.liveStreak(s);
-  if (streak && s.streak.last !== game.today()) lines.push([`Your <b>${streak}-day streak</b> ends at midnight. One sighting keeps it alive!`, 'sad']);
-  const target = dailyTarget();
-  if (target) lines.push([`Signal detected… a <b>${TYPES[AFFINITY[target.k][0]].name}-type</b> animal lives in ${esc(target.h.toLowerCase())}. Can you find it?`, 'wow']);
-  lines.push(['Tip: a smooth left-right sweep earns an <b>S grade</b> and doubles your holo odds!', 'happy']);
-  return lines;
-}
-
-let pipIdx = 0;
 function renderHome() {
   const s = state();
   const keys = caughtKeys();
   const n = keys.length;
-  const lines = pipLines();
-  const [text, mood] = lines[pipIdx % lines.length];
   const recent = keys.slice().sort((a, b) => s.caught[b].last - s.caught[a].last)[0];
   const d = game.dailyState(s);
   const done = d.missions.filter((m) => (d.progress[m.id] || 0) >= m.goal).length;
@@ -1989,8 +1924,8 @@ function renderHome() {
     <div class="home-top"><span class="dot-text home-logo"><span class="sr">WildDex</span>${dotSVG('WILDDEX')}</span>
       <button type="button" class="help-btn" data-help="intro" aria-label="How to play">?</button></div>
     <section class="hero">
+      <div class="hero-rays" aria-hidden="true"></div>
       <div class="hero-card">${recent ? cardHTML(BY_KEY[recent]) : '<div class="card ghost"><b>?</b><small>your first card</small></div>'}</div>
-      <div class="hero-pip" role="button" tabindex="0" aria-label="Talk to Pip">${pipSVG(mood)}<p class="bubble" aria-live="polite">${text}</p></div>
     </section>
     <button type="button" class="scan-cta" data-tab="scan" data-autostart>${ICON.scan}<span>Scan an animal</span></button>
     <div class="tiles">
@@ -2006,19 +1941,6 @@ function renderHome() {
 }
 $('#home').addEventListener('click', (ev) => {
   if (ev.target.closest('[data-home="crate"]')) { sfx.click(); crateFlow(true); return; }
-  const pip = ev.target.closest('.hero-pip');
-  if (pip) {
-    pipIdx++;
-    const lines = pipLines();
-    const [text, mood] = lines[pipIdx % lines.length];
-    pip.innerHTML = `${pipSVG(mood)}<p class="bubble" aria-live="polite">${text}</p>`;
-    pip.classList.remove('boop'); void pip.offsetWidth; pip.classList.add('boop');
-    tone(1760, 0, 0.04, 'sine', 0.03); tone(2349, 0.06, 0.07, 'sine', 0.03);
-    buzz(10);
-  }
-});
-$('#home').addEventListener('keydown', (ev) => {
-  if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.closest('.hero-pip')) { ev.preventDefault(); ev.target.closest('.hero-pip').click(); }
 });
 
 // ---------------------------------------------------------------- help (the "?" buttons)
