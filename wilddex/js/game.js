@@ -136,6 +136,55 @@ export function claimMission(state, id) {
   return gained;
 }
 
+// ---- weekly events: a themed challenge that rotates every ISO week
+const EVENTS = [
+  { id: 'monsoon', name: 'Monsoon Week', type: 'aqua', text: 'Log 5 Aqua-type sightings' },
+  { id: 'bugs', name: 'Bug Week', type: 'swarm', text: 'Log 5 Swarm-type sightings' },
+  { id: 'sky', name: 'Sky Watch', type: 'aero', text: 'Log 5 Aero-type sightings' },
+  { id: 'green', name: 'Green Week', type: 'verdant', text: 'Log 4 Verdant-type sightings', goal: 4 },
+  { id: 'night', name: 'Night Watch', type: 'umbra', text: 'Log 3 Umbra-type sightings', goal: 3 },
+  { id: 'hunt', name: 'Predator Week', type: 'feral', text: 'Log 4 Feral-type sightings', goal: 4 },
+  { id: 'farm', name: 'Farm Fair', set: 'farm', text: 'Log 5 sightings from Farm & Country' },
+  { id: 'yard', name: 'Backyard Blitz', set: 'backyard', text: 'Log 5 sightings from Backyard & Park' },
+  { id: 'pets', name: 'Pet Parade', set: 'home', text: 'Log 5 sightings from Home & Pets' },
+];
+export const EVENT_REWARD = 80;
+
+function isoWeek(d = new Date()) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return { year: t.getUTCFullYear(), week: Math.ceil(((t - y0) / 86400000 + 1) / 7), daysLeft: 8 - (d.getDay() || 7) };
+}
+
+export function weeklyEvent(state) {
+  const { year, week, daysLeft } = isoWeek();
+  const key = `${year}-W${week}`;
+  const ev = EVENTS[(year * 53 + week) % EVENTS.length];
+  if (!state.event || state.event.key !== key) state.event = { key, progress: 0, claimed: false };
+  return { ...ev, goal: ev.goal || 5, reward: EVENT_REWARD, key, daysLeft, progress: state.event.progress, claimed: state.event.claimed };
+}
+
+// Returns true when this sighting completes the week's event.
+export function progressEvent(state, entry) {
+  const ev = weeklyEvent(state);
+  if (ev.claimed || ev.progress >= ev.goal) return false;
+  const hit = ev.type ? AFFINITY[entry.k].includes(ev.type) : entry.set === ev.set;
+  if (!hit) return false;
+  state.event.progress++;
+  return state.event.progress >= ev.goal;
+}
+
+export function claimEvent(state) {
+  const ev = weeklyEvent(state);
+  if (ev.claimed || ev.progress < ev.goal) return 0;
+  state.event.claimed = true;
+  state.eventsWon = (state.eventsWon || 0) + 1;
+  state.shards = (state.shards || 0) + EVENT_REWARD;
+  return EVENT_REWARD;
+}
+
 // ---- achievements (computed, never stored)
 export function achievements(state) {
   const caught = Object.keys(state.caught).filter((k) => BY_KEY[k]);
@@ -152,6 +201,9 @@ export function achievements(state) {
     { id: 'types', name: 'Spectrum', desc: 'Own every affinity type', done: Object.keys(TYPES).every((t) => byType[t]) },
     { id: 'streak7', name: 'Dedicated', desc: 'Reach a 7-day streak', done: (state.streak?.best || 0) >= 7 },
     { id: 'sector', name: 'Sector Secured', desc: 'Complete any sector', done: SETS.some((s) => s.entries.every((e) => state.caught[e.k])) },
+    { id: 'event', name: 'Event Champion', desc: 'Complete a weekly event', done: (state.eventsWon || 0) >= 1 },
+    { id: 'social', name: 'Field Partner', desc: 'Compare with a friend', done: (state.compared || 0) >= 1 },
+    { id: 'mapper', name: 'Cartographer', desc: 'Tag 10 capture locations', done: caught.filter((k) => state.caught[k].loc).length >= 10 },
   ];
   return { list, byType };
 }

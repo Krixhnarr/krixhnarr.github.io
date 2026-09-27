@@ -53,6 +53,8 @@ const sfx = {
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568];
     notes.slice(0, 3 + r).forEach((f, i) => tone(f, i * 0.07, 0.2, 'square', 0.03));
     tone(notes[2 + r] * 1.5, 0.12 + r * 0.08, 0.6, 'triangle', 0.05);
+    if (r >= 3) [1568, 1760, 2093, 2349, 2637].forEach((f, i) => tone(f, 0.5 + i * 0.06, 0.25, 'triangle', 0.035));
+    if (r === 4) [523.25, 659.25, 783.99].forEach((f) => tone(f, 0.9, 1.2, 'sine', 0.05));
   },
   again: () => { tone(880, 0, 0.08); tone(1320, 0.09, 0.14); },
   coin: () => { tone(988, 0, 0.06, 'square', 0.03); tone(1319, 0.06, 0.18, 'square', 0.03); },
@@ -128,9 +130,9 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-function flash() {
+function flash(rarity = 0) {
   const f = document.createElement('div');
-  f.className = 'flash';
+  f.className = `flash${rarity === 4 ? ' gold' : ''}`;
   document.body.appendChild(f);
   setTimeout(() => f.remove(), 450);
 }
@@ -160,6 +162,7 @@ function closeSheet() {
   sheet.hidden = true;
   $('#sheet-body').innerHTML = '';
   stopSpeaking();
+  gyroTarget = null;
   const cb = onSheetClose;
   onSheetClose = null;
   if (cb) cb();
@@ -175,8 +178,37 @@ function hydratePhotos(root) {
   });
 }
 
+// Cards follow the phone's tilt (gyroscope), with finger/mouse as fallback.
+let gyroTarget = null;
+let gyroListening = false;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function onOrientation(ev) {
+  if (!gyroTarget || ev.beta == null || ev.gamma == null) return;
+  const g = gyroTarget;
+  if (!g.base) g.base = [ev.beta, ev.gamma];
+  const rx = clamp((g.base[0] - ev.beta) * 0.7, -16, 16);
+  const ry = clamp((ev.gamma - g.base[1]) * 0.9, -20, 20);
+  g.rx += (rx - g.rx) * 0.25;
+  g.ry += (ry - g.ry) * 0.25;
+  g.el.style.setProperty('--rx', `${g.rx.toFixed(2)}deg`);
+  g.el.style.setProperty('--ry', `${g.ry.toFixed(2)}deg`);
+  g.el.style.setProperty('--mx', `${50 + g.ry * 2.4}%`);
+  g.el.style.setProperty('--my', `${50 - g.rx * 2.4}%`);
+}
+async function startGyro(el) {
+  gyroTarget = { el, base: null, rx: 0, ry: 0 };
+  if (gyroListening || !state().settings.tilt || typeof DeviceOrientationEvent === 'undefined') return;
+  try {
+    // iOS asks once, and only from a tap.
+    if (typeof DeviceOrientationEvent.requestPermission === 'function' && (await DeviceOrientationEvent.requestPermission()) !== 'granted') return;
+    window.addEventListener('deviceorientation', onOrientation);
+    gyroListening = true;
+  } catch { /* no permission from this context — finger tilt still works */ }
+}
+
 function enableTilt(el) {
   if (reducedMotion()) return;
+  startGyro(el);
   const move = (ev) => {
     const r = el.getBoundingClientRect();
     const x = (ev.clientX - r.left) / r.width;
@@ -192,17 +224,22 @@ function enableTilt(el) {
 
 function burst(stage, rarity) {
   if (reducedMotion()) return;
-  const colors = ['#9B7CD8', '#CDBDF0', '#F1F1F4'];
+  const colors = {
+    1: ['#A6A6B0', '#DCDCE2', '#F1F1F4'],
+    2: ['#CDBDF0', '#F1F1F4', '#9B7CD8'],
+    3: ['#B9A0F0', '#F1F1F4', '#5FB6DA', '#D98DDB'],
+    4: ['#F2D27A', '#FFF1C2', '#E8B84A', '#CDBDF0'],
+  }[rarity] || ['#9B7CD8', '#CDBDF0', '#F1F1F4'];
   const b = document.createElement('div');
   b.className = 'burst';
-  const n = 14 + rarity * 8;
+  const n = 10 + rarity * rarity * 5;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.random() * 0.3;
     const d = 90 + Math.random() * (60 + rarity * 30);
     const p = document.createElement('i');
     p.style.setProperty('--x', `${Math.cos(a) * d}px`);
     p.style.setProperty('--y', `${Math.sin(a) * d}px`);
-    p.style.setProperty('--c', colors[i % 3]);
+    p.style.setProperty('--c', colors[i % colors.length]);
     b.appendChild(p);
   }
   const ring = document.createElement('div');
@@ -292,7 +329,8 @@ function detailHTML(e, { banner = '', gains = '', hideUntilFlip = false, typing 
         <div class="panel-body capture">
           ${rec.photo ? `<img data-photo="${e.k}" alt="Your capture photo of a ${esc(e.n)}">` : '<span></span>'}
           <ul><li><span>first</span> ${isoDate(rec.first)}</li><li><span>last</span> ${isoDate(rec.last)}</li>
-          <li><span>forms</span> ${rec.forms.length}/${e.c.length}</li></ul>
+          <li><span>forms</span> ${rec.forms.length}/${e.c.length}</li>
+          ${rec.loc ? `<li><span>near</span> ${fmtLoc(rec.loc)} · <a href="${osmURL(rec.loc)}" target="_blank" rel="noopener">map ↗</a></li>` : ''}</ul>
         </div>${forms ? `<div class="panel-body" style="padding-top:0">${forms}</div>` : ''}</section>` : `
       <section class="panel"><div class="panel-head"><span>Dex entry</span><span>${RARITY[e.r].name}</span></div>
         <div class="panel-body"><p class="dex-text done">${intel
@@ -624,23 +662,28 @@ async function register(e, form, alternatives = []) {
   if (streak.bonus) { shards += streak.bonus; gains.push([`day ${streak.days} streak +${streak.bonus}◆`, false]); }
   const missionsDone = game.progressMissions(s, { entry: e, isNew });
   missionsDone.forEach((m) => gains.push([`mission complete: ${m.text}`, true]));
+  const eventDone = game.progressEvent(s, e);
+  if (eventDone) gains.push([`event complete: ${game.weeklyEvent(s).name}`, true]);
   const setDone = isNew && SETS.find((x) => x.id === e.set).entries.every((x) => s.caught[x.k]);
   if (setDone) { shards += 50; gains.push([`sector complete +50◆`, true]); }
   s.shards = (s.shards || 0) + shards;
   store.save();
   refreshAll(true);
+  tagLocation(e.k);
 
   log(isNew
     ? `[ok] new card #${pad(e.no)} ${esc(e.n)} · +${shards}◆`
     : `[ok] sighting #${pad(e.no)} ×${rec.count} · +${shards}◆`, 'ok');
-  if (navigator.vibrate) navigator.vibrate(isNew ? [30, 40, 80] : 30);
+  if (navigator.vibrate) navigator.vibrate(!isNew ? 30 : e.r === 4 ? [40, 60, 40, 60, 200] : e.r === 3 ? [30, 40, 30, 40, 120] : [30, 40, 80]);
 
   const gainsHTML = gains.map(([t, hl], i) => `<span class="gain${hl ? ' hl' : ''}" style="animation-delay:${i * 0.08}s">${esc(t)}</span>`).join('');
-  const banner = isNew ? '<span class="banner">▲ New card</span>' : `<span class="banner soft">● Sighting logged ×${rec.count}</span>`;
+  const PULL = { 1: '▲ New card', 2: '▲ Uncommon pull', 3: '◆ Rare pull', 4: '★ Legendary pull' };
+  const banner = isNew ? `<span class="banner r${e.r}">${PULL[e.r]}</span>` : `<span class="banner soft">● Sighting logged ×${rec.count}</span>`;
   const aura = typeColor(e);
 
   const body = openSheet(`
     <div class="stage${isNew ? ' charging' : ''}" style="--aura:${aura}" ${isNew ? 'role="button" tabindex="0" aria-label="Reveal card"' : ''}>
+      <div class="rays" aria-hidden="true"></div>
       <div class="flip${isNew ? ' down' : ''}">
         <div class="face"><div class="tilt">${cardHTML(e, { tag: 'div' })}</div></div>
         ${isNew ? `<div class="back face">${cardBackHTML()}</div>` : ''}
@@ -663,7 +706,7 @@ async function register(e, form, alternatives = []) {
     $$('[data-decode]', after).forEach((el) => decode(el));
     typeOut($('.dex-text .typed', after), e.t);
     if (isNew) setTimeout(() => speak(`${e.n}. ${e.t}`), 400);
-    if (missionsDone.length) setTimeout(() => toast('MISSION COMPLETE · CLAIM IN OPS'), 900);
+    if (missionsDone.length || eventDone) setTimeout(() => toast(eventDone ? 'WEEKLY EVENT COMPLETE · CLAIM IN OPS' : 'MISSION COMPLETE · CLAIM IN OPS'), 900);
     else if (setDone) setTimeout(() => toast('SECTOR COMPLETE'), 900);
   };
 
@@ -675,10 +718,21 @@ async function register(e, form, alternatives = []) {
       if (revealed) return;
       revealed = true;
       stage.classList.remove('charging');
-      $('.flip', stage).classList.remove('down');
-      $('.actions.pre', body)?.remove();
-      setTimeout(() => { burst(stage, e.r); sfx.reveal(e.r); flash(); }, 350);
-      setTimeout(startDetail, 700);
+      // Rarer cards hold the tension a little longer before flipping.
+      const hold = [0, 0, 120, 450, 900][e.r];
+      if (hold) { stage.classList.add('tease', `r${e.r}`); sfx.charge(); }
+      setTimeout(() => {
+        $('.flip', stage).classList.remove('down');
+        $('.actions.pre', body)?.remove();
+        setTimeout(() => {
+          stage.classList.add('revealed', `r${e.r}`);
+          burst(stage, e.r);
+          if (e.r >= 3) setTimeout(() => burst(stage, e.r), 260);
+          sfx.reveal(e.r);
+          flash(e.r);
+        }, 350);
+        setTimeout(startDetail, 700 + (e.r >= 3 ? 300 : 0));
+      }, hold);
     };
     stage.addEventListener('click', reveal);
     stage.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); reveal(); } });
@@ -733,7 +787,8 @@ function refreshAll(bumpWallet = false) {
   const C = 2 * Math.PI * 27;
   $('#lvl-arc').style.strokeDashoffset = C * (1 - Math.max(0.02, (xp() - lo) / (hi - lo)));
   if (bumpWallet) { const w = $('#meters'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
-  $('#ops-badge').hidden = !unclaimedMissions();
+  const ev = game.weeklyEvent(s);
+  $('#ops-badge').hidden = !(unclaimedMissions() || (ev.progress >= ev.goal && !ev.claimed));
   renderRecent();
   if (currentTab === 'binder') renderBinder();
   if (currentTab === 'ops') renderOps();
@@ -782,8 +837,8 @@ function renderBinder() {
   $('#grid').innerHTML = list.map((e) => {
     const rec = s.caught[e.k];
     const intel = !rec && s.intel[e.k];
-    const cls = `slot${rec ? '' : ' locked'}${intel ? ' intel' : ''}`;
-    return `<button type="button" class="${cls}" data-slot="${e.k}" style="--rc:${rc[e.r]}" aria-pressed="${binder.selected === e.k}"
+    const cls = `slot r${e.r}${rec ? ' owned' : ' locked'}${intel ? ' intel' : ''}`;
+    return `<button type="button" class="${cls}" data-slot="${e.k}" style="--rc:${rc[e.r]};--tc:${typeColor(e)}" aria-pressed="${binder.selected === e.k}"
       aria-label="#${pad(e.no)} ${rec || intel ? esc(e.n) : 'unknown'}${rec ? `, seen ${rec.count} times` : ', not captured'}">
       <span class="no">${pad(e.no)}</span><i class="rar"></i>
       <img src="${artURL(e)}" alt="" loading="lazy" draggable="false">
@@ -802,7 +857,8 @@ function renderInvDetail(e) {
   const known = rec || intel;
   const lv = rec ? game.levelFor(rec.count) : 1;
   const st = game.statsFor(e, lv);
-  const types = AFFINITY[e.k].map((t) => TYPES[t].name).join(' / ');
+  const types = AFFINITY[e.k].map((t) => `<b style="color:${TYPES[t].color}">${TYPES[t].name}</b>`).join(' / ');
+  const rarCol = { 1: 'var(--steel)', 2: 'var(--accent-soft)', 3: 'var(--accent-hi)', 4: 'var(--gold)' }[e.r];
   $('#inv-detail').innerHTML = `
     <p class="inv-name">${known ? `${esc(e.n)} <small>// ${esc(e.s)}</small>` : `? ? ? <small>// SIGNAL #${pad(e.no)} ENCRYPTED</small>`}</p>
     <div class="inv-art${rec ? '' : ' locked'}${intel ? ' intel' : ''}">
@@ -814,7 +870,7 @@ function renderInvDetail(e) {
       <img src="${artURL(e)}" alt="">
     </div>
     <div class="inv-info">
-      <p class="inv-kind">${RARITY[e.r].name}${rec ? ` · LV ${lv}` : ''}<span>${types}</span></p>
+      <p class="inv-kind"><em style="color:${rarCol};font-style:normal">${RARITY[e.r].name}</em>${rec ? ` · LV ${lv}` : ''}<span>${types}</span></p>
       <div class="inv-stats">${game.STAT_KEYS.map((k) => `<div class="inv-stat"><b>${rec ? `+${st[k]}` : '??'}</b>${k}<i class="seg"><em style="width:${rec ? st[k] : 0}%"></em></i></div>`).join('')}</div>
     </div>
     <div class="inv-use">
@@ -868,7 +924,21 @@ function renderOps() {
   const allClaimed = d.missions.every((m) => d.claimed[m.id]);
   const weekDots = Array.from({ length: 7 }, (_, i) => `<i class="${i < Math.min(streak, 7) ? 'on' : ''}"></i>`).join('');
 
+  const ev = game.weeklyEvent(s);
+  const evTc = ev.type ? TYPES[ev.type].color : 'var(--accent)';
+  const evP = Math.min(ev.goal, ev.progress);
   $('#ops').innerHTML = `
+    <section class="card-box chamfer event" style="--tc:${evTc}">
+      <div class="box-head"><h3>Weekly event</h3><small>${ev.daysLeft} day${ev.daysLeft === 1 ? '' : 's'} left</small></div>
+      <div class="event-body">
+        <div class="event-icon">${ev.type ? glyph(ev.type) : `<span>${SETS.find((x) => x.id === ev.set).icon}</span>`}</div>
+        <div><p class="event-name">${esc(ev.name)}</p><p class="event-text">${esc(ev.text)} · ${evP}/${ev.goal}</p>
+          <div class="prog"><span style="width:${(evP / ev.goal) * 100}%"></span></div></div>
+        <div>${ev.claimed ? '<span class="tchip" style="--tc:var(--dim)">done</span>'
+          : `<button type="button" class="btn small${evP >= ev.goal ? ' primary' : ''}" data-claim-event ${evP >= ev.goal ? '' : 'disabled'}>+${ev.reward}◆</button>`}</div>
+      </div>
+    </section>
+
     <section class="card-box chamfer">
       <div class="box-head"><h3>Daily orders</h3><small>resets at midnight</small></div>
       ${d.missions.map((m) => {
@@ -899,11 +969,24 @@ function renderOps() {
     </section>
 
     <section class="card-box chamfer">
+      <div class="box-head"><h3>Field map</h3><small>${tagged().length} tagged</small></div>
+      ${fieldMapHTML()}
+    </section>
+
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Badges</h3><small>${list.filter((a) => a.done).length}/${list.length}</small></div>
       <div class="achv">${list.map((a) => `<div class="${a.done ? 'done' : ''}"><div class="hex">${ACHV_ICON}</div><b>${a.name}</b>${a.desc}</div>`).join('')}</div>
     </section>`;
 }
 $('#ops').addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-claim-event]')) {
+    const gained = game.claimEvent(state());
+    if (gained) { store.save(); sfx.reveal(2); toast(`EVENT CLEARED · +${gained}◆`); refreshAll(true); }
+    return;
+  }
+  const pin = ev.target.closest('[data-map-key]');
+  if (pin) { openEntry(pin.dataset.mapKey); return; }
+  if (ev.target.closest('[data-goto-id]')) { showTab('id'); return; }
   const b = ev.target.closest('[data-claim]');
   if (!b) return;
   const gained = game.claimMission(state(), b.dataset.claim);
@@ -925,6 +1008,7 @@ function operatorId() {
   return s.opId;
 }
 function renderProfile() {
+  queueMicrotask(renderQR);
   const s = state();
   const n = caughtKeys().length;
   const [, rankName] = rankFor(n);
@@ -959,6 +1043,24 @@ function renderProfile() {
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
       <label class="toggle"><span>Sound FX<small>Scanner blips and reveal chimes</small></span>
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
+      <label class="toggle"><span>Card tilt<small>Cards follow your phone's motion</small></span>
+        <input type="checkbox" class="switch" data-setting="tilt" ${s.settings.tilt ? 'checked' : ''}></label>
+      <label class="toggle"><span>Location tags<small>Save roughly where you found each animal (about 1 km, kept on this phone)</small></span>
+        <input type="checkbox" class="switch" data-setting="location" ${s.settings.location ? 'checked' : ''}></label>
+    </section>
+
+    <section class="card-box chamfer compare">
+      <div class="box-head"><h3>Compare</h3><small>no server · no cards given</small></div>
+      <p class="about">Show a friend this code, or send your link. When they open it, their WildDex shows which cards you each have.</p>
+      <div class="qr" id="qr" aria-label="QR code with your collection link"></div>
+      <div class="btn-row" style="justify-content:center">
+        <button type="button" class="btn small primary" data-act="share">Share link</button>
+        <button type="button" class="btn small" data-act="copy">Copy link</button>
+      </div>
+      <form class="paste">
+        <input type="text" id="friend-code" placeholder="Paste a friend's link or code" autocomplete="off" spellcheck="false">
+        <button type="submit" class="btn small">Compare</button>
+      </form>
     </section>
 
     <section class="card-box chamfer">
@@ -975,7 +1077,7 @@ function renderProfile() {
       <div class="box-head"><h3>About</h3></div>
       <p>Recognition runs entirely on your phone with a MobileNet v2 neural net — photos never leave your device, and scanning works offline once loaded.</p>
       <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Each scan checks for real depth that moves with your hand (parallax), so photos, prints, screens and videos are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
-      <p>Card stats are game values. 3D animal art: Microsoft Fluent Emoji (MIT).</p>
+      <p>Card stats are game values. 3D animal art: Microsoft Fluent Emoji (MIT). QR codes: qrcode-generator (MIT).</p>
       <p><button type="button" class="link" data-act="intro">How to play</button></p>
     </section>`;
 }
@@ -988,6 +1090,15 @@ $('#profile').addEventListener('change', async (ev) => {
     state().settings[t.dataset.setting] = t.checked;
     store.save();
     if (t.dataset.setting === 'sound' && t.checked) sfx.again();
+    if (t.dataset.setting === 'location' && t.checked) {
+      const pos = await getPosition();
+      if (!pos) {
+        t.checked = false;
+        state().settings.location = false;
+        store.save();
+        toast('LOCATION PERMISSION NEEDED');
+      } else toast('LOCATION TAGS ON');
+    }
   }
   if (t.dataset.act === 'import' && t.files[0]) {
     try {
@@ -1000,9 +1111,25 @@ $('#profile').addEventListener('change', async (ev) => {
     t.value = '';
   }
 });
+$('#profile').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const friend = parseCode($('#friend-code').value);
+  if (!friend) { toast('THAT CODE ISN\'T A WILDDEX LINK'); return; }
+  openCompare(friend);
+});
 $('#profile').addEventListener('click', async (ev) => {
   const act = ev.target.closest('[data-act]');
   if (!act) return;
+  if (act.dataset.act === 'share') {
+    const url = shareURL();
+    try {
+      if (navigator.share) await navigator.share({ title: 'My WildDex', text: `Compare WildDex collections with ${state().name || 'me'}!`, url });
+      else { await navigator.clipboard.writeText(url); toast('LINK COPIED'); }
+    } catch { /* share sheet dismissed */ }
+  }
+  if (act.dataset.act === 'copy') {
+    try { await navigator.clipboard.writeText(shareURL()); toast('LINK COPIED'); } catch { $('#friend-code').value = shareURL(); toast('COPY THE LINK FROM THE BOX'); }
+  }
   if (act.dataset.act === 'export') {
     const json = await store.exportBackup();
     const a = document.createElement('a');
@@ -1020,6 +1147,162 @@ $('#profile').addEventListener('click', async (ev) => {
   }
   if (act.dataset.act === 'intro') showIntro();
 });
+
+// ---------------------------------------------------------------- location tags (opt-in)
+const fmtLoc = ([lat, lon]) => `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+const osmURL = ([lat, lon]) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=13/${lat}/${lon}`;
+
+function getPosition() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve(p),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 },
+    );
+  });
+}
+
+// Saves a rough (2-decimal ≈ 1 km) position for a capture, without delaying the reveal.
+async function tagLocation(key) {
+  if (!state().settings.location) return;
+  const pos = await getPosition();
+  const rec = state().caught[key];
+  if (!pos || !rec) return;
+  const loc = [Math.round(pos.coords.latitude * 100) / 100, Math.round(pos.coords.longitude * 100) / 100];
+  if (!rec.loc) rec.loc = loc;
+  rec.lastLoc = loc;
+  store.save();
+}
+
+const tagged = () => caughtKeys().filter((k) => state().caught[k].loc).map((k) => ({ e: BY_KEY[k], loc: state().caught[k].loc }));
+
+// A self-drawn map of capture spots — no map tiles, nothing leaves the phone.
+function fieldMapHTML() {
+  const pts = tagged();
+  if (!pts.length) {
+    return `<p class="about">${state().settings.location
+      ? 'No tagged captures yet. Your next scans will appear here.'
+      : 'Turn on <b>Location tags</b> in ID → Config to plot where you find animals. Positions are rounded to about 1 km and stay on this phone.'}</p>
+      ${state().settings.location ? '' : '<button type="button" class="btn small" data-goto-id>Open config</button>'}`;
+  }
+  const lats = pts.map((p) => p.loc[0]);
+  const lons = pts.map((p) => p.loc[1]);
+  const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const k = Math.cos((midLat * Math.PI) / 180);
+  let spanX = (Math.max(...lons) - Math.min(...lons)) * k;
+  let spanY = Math.max(...lats) - Math.min(...lats);
+  const span = Math.max(spanX, spanY * 1.6, 0.04);
+  spanX = span; spanY = span / 1.6;
+  const cx = ((Math.min(...lons) + Math.max(...lons)) / 2) * k;
+  const W = 320; const H = 200; const pad = 22;
+  const px = (lon) => W / 2 + ((lon * k - cx) / spanX) * (W - 2 * pad);
+  const py = (lat) => H / 2 - ((lat - midLat) / spanY) * (H - 2 * pad);
+  // group captures at the same spot
+  const spots = new Map();
+  for (const p of pts) {
+    const id = p.loc.join(',');
+    if (!spots.has(id)) spots.set(id, []);
+    spots.get(id).push(p);
+  }
+  const kmAcross = Math.round(span * 111);
+  const marks = [...spots.values()].map((group) => {
+    const [lat, lon] = group[0].loc;
+    const x = px(lon); const y = py(lat);
+    const lead = group[0].e;
+    return `<g class="pin" data-map-key="${lead.k}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
+      <circle r="13" style="stroke:${typeColor(lead)}"/>
+      <image href="${artURL(lead)}" x="-10" y="-10" width="20" height="20"/>
+      ${group.length > 1 ? `<text x="11" y="-9">${group.length}</text>` : ''}
+      <title>${esc(group.map((g) => g.e.n).join(', '))} · ${fmtLoc(group[0].loc)}</title></g>`;
+  }).join('');
+  return `<svg class="fieldmap" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of ${pts.length} tagged captures">
+      <defs><pattern id="fm-dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8"/></pattern></defs>
+      <rect class="bg" width="${W}" height="${H}"/><rect width="${W}" height="${H}" fill="url(#fm-dots)"/>
+      <path class="cross" d="M${W / 2} 0V${H}M0 ${H / 2}H${W}"/>
+      ${marks}
+      <text class="scale" x="8" y="${H - 8}">≈ ${kmAcross < 1 ? '<1' : kmAcross} km across · ${spots.size} spot${spots.size === 1 ? '' : 's'}</text>
+    </svg>
+    <p class="about" style="margin-top:8px">Tap a marker to open the card. Rounded to ~1 km · stored only on this phone · never included in compare codes.</p>`;
+}
+
+// ---------------------------------------------------------------- compare with friends
+const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64u = (str) => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4)), (c) => c.charCodeAt(0));
+
+// v1.<name>.<level>.<bitset over ENTRIES order> — just which cards you own.
+function collectionCode() {
+  const bits = new Uint8Array(Math.ceil(ENTRIES.length / 8));
+  ENTRIES.forEach((e, i) => { if (state().caught[e.k]) bits[i >> 3] |= 1 << (i & 7); });
+  const name = (state().name || 'operator').slice(0, 18);
+  return `1.${b64u(new TextEncoder().encode(name))}.${opLevel()}.${b64u(bits)}`;
+}
+const shareURL = () => `${location.origin}${location.pathname}#c=${collectionCode()}`;
+
+function parseCode(text) {
+  try {
+    const raw = String(text || '').trim();
+    const code = raw.includes('#c=') ? decodeURIComponent(raw.split('#c=')[1]) : raw;
+    const [v, name, level, bitsStr] = code.split('.');
+    if (v !== '1' || !bitsStr) return null;
+    const bits = unb64u(bitsStr);
+    if (bits.length < Math.ceil(ENTRIES.length / 8)) return null;
+    const owned = new Set(ENTRIES.filter((e, i) => bits[i >> 3] & (1 << (i & 7))).map((e) => e.k));
+    return { name: new TextDecoder().decode(unb64u(name)).slice(0, 18) || 'operator', level: Math.max(1, Math.min(99, Number(level) || 1)), owned };
+  } catch { return null; }
+}
+
+async function renderQR() {
+  const box = $('#qr');
+  if (!box) return;
+  try {
+    const { default: qrcode } = await import('../vendor/qrcode.mjs');
+    const qr = qrcode(0, 'M');
+    qr.addData(shareURL());
+    qr.make();
+    const n = qr.getModuleCount();
+    let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+    box.innerHTML = `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#F1F1F4"/><path d="${d}" fill="#242427"/></svg>`;
+  } catch { box.textContent = 'QR unavailable — use Share link.'; }
+}
+
+function openCompare(friend) {
+  const s = state();
+  s.compared = (s.compared || 0) + 1;
+  s.onboarded = true;
+  store.save();
+  const mine = new Set(caughtKeys());
+  const theirsOnly = ENTRIES.filter((e) => friend.owned.has(e.k) && !mine.has(e.k));
+  const mineOnly = ENTRIES.filter((e) => mine.has(e.k) && !friend.owned.has(e.k));
+  const both = ENTRIES.filter((e) => mine.has(e.k) && friend.owned.has(e.k));
+  const slots = (list, hint) => (list.length
+    ? `<div class="slot-grid mini">${list.map((e) => `<button type="button" class="slot${mine.has(e.k) ? '' : ' seen'}" data-key="${e.k}" title="${esc(e.n)}">
+        <span class="no">${pad(e.no)}</span><img src="${artURL(e)}" alt="${esc(e.n)}" loading="lazy"></button>`).join('')}</div>`
+    : `<p class="about">${hint}</p>`);
+  const body = openSheet(`<div class="detail-head">
+      <p class="eyebrow">Compare // field partner</p>
+      <h2 data-decode>${esc(friend.name)}</h2>
+      <span class="sci">LV ${friend.level} · ${friend.owned.size} cards</span>
+    </div>
+    <div class="compare-stats">
+      <div><b>${theirsOnly.length}</b><span>they have · you don't</span></div>
+      <div><b>${both.length}</b><span>both</span></div>
+      <div><b>${mineOnly.length}</b><span>you have · they don't</span></div>
+    </div>
+    <section class="panel"><div class="panel-head"><span>Targets — they have, you don't</span><span>${theirsOnly.length}</span></div>
+      <div class="panel-body">${slots(theirsOnly, 'Nothing new here — you have every card they do!')}</div></section>
+    <section class="panel"><div class="panel-head"><span>Your exclusives</span><span>${mineOnly.length}</span></div>
+      <div class="panel-body">${slots(mineOnly, 'They have every card you do.')}</div></section>
+    <section class="panel"><div class="panel-head"><span>Both collected</span><span>${both.length}</span></div>
+      <div class="panel-body">${slots(both, 'No cards in common yet.')}</div></section>
+    <p class="fact">Comparing never adds cards — go find the animals yourself!</p>
+    <div class="actions"><button type="button" class="btn primary" data-close>Done</button></div>`);
+  body.addEventListener('click', (ev) => {
+    const b = ev.target.closest('.slot[data-key]');
+    if (b) openEntry(b.dataset.key);
+  });
+}
 
 // cards anywhere open their detail
 document.addEventListener('click', (ev) => {
@@ -1134,6 +1417,16 @@ function drawWaves() {
   });
 }
 
+// A friend's link: …/wilddex/#c=<code>
+function handleCompareLink() {
+  const m = location.hash.match(/^#c=(.+)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname);
+  const friend = parseCode(decodeURIComponent(m[1]));
+  if (friend) setTimeout(() => openCompare(friend), state().onboarded ? 0 : 400);
+  else toast('THAT LINK ISN\'T A VALID WILDDEX CODE');
+}
+
 async function boot() {
   drawWaves();
   let tab = 'scan';
@@ -1154,6 +1447,8 @@ async function boot() {
     } catch { /* permissions API doesn't know "camera" in some browsers */ }
   }
   if (!state().onboarded) showIntro();
+  handleCompareLink();
+  window.addEventListener('hashchange', handleCompareLink);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
 }
