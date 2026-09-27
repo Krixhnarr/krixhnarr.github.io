@@ -15,7 +15,7 @@ const fresh = () => ({
   streak: null,
   name: '',
   onboarded: false,
-  settings: { voice: true, sound: true, tilt: true, location: false, haptics: true, theme: 'auto' },
+  settings: { voice: true, sound: true, music: true, musicVol: 0.6, tilt: true, location: false, haptics: true, theme: 'auto' },
 });
 
 let state = fresh();
