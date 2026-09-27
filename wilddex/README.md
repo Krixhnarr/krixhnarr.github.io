@@ -49,9 +49,6 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   icon tab bar with a raised Scan button, level/XP chip and currency pills in
   the header, chunky press-down buttons in Russo One, LED dot-matrix titles,
   a drifting glow-and-grid background and idle motion throughout.
-- **Pip** (`js/pip.js`): the field-drone mascot on Home and in pop-up
-  dialogue — greets, gives counter-type tips for the daily rival, teases a
-  nearby animal, and reacts to captures, holos, failed scans and battles.
 
 Plain static files, no build step. When changing app files, bump `VERSION`
 in `sw.js` so installed copies pick up the update.
