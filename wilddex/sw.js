@@ -1,12 +1,14 @@
 // Offline support. The app shell is refreshed in the background
-// (stale-while-revalidate); the ~15 MB model and TF.js bundle are cached on
+// (stale-while-revalidate); the ~15 MB model, TF.js bundle, 3D art and fonts are cached on
 // first use and served from cache afterwards. Scope is /wilddex/ only.
-const VERSION = 'wilddex-v2';
+const VERSION = 'wilddex-v3';
 const SHELL = [
   './',
   'index.html',
   'css/style.css',
   'js/app.js',
+  'js/affinity.js',
+  'js/game.js',
   'js/classifier.js',
   'js/dex-data.js',
   'js/labels.js',
@@ -14,6 +16,8 @@ const SHELL = [
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',
+  'fonts/doto-latin.woff2',
+  'fonts/jetbrains-mono-latin.woff2',
 ];
 
 self.addEventListener('install', (event) => {
@@ -28,7 +32,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-const isHeavy = (url) => url.pathname.includes('/model/') || url.pathname.includes('/vendor/');
+const isHeavy = (url) => ['/model/', '/vendor/', '/art/', '/fonts/'].some((p) => url.pathname.includes(p));
 const isFont = (url) => url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
 
 self.addEventListener('fetch', (event) => {

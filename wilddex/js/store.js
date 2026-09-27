@@ -9,6 +9,10 @@ const STORE = 'photos';
 const fresh = () => ({
   caught: {}, // key -> { first, last, count, forms: [classIdx], photo: bool }
   scans: 0,
+  shards: 0,
+  intel: {}, // key -> true once a locked card's intel is decrypted with shards
+  daily: null,
+  streak: null,
   name: '',
   onboarded: false,
   settings: { voice: true, sound: true },
@@ -126,7 +130,7 @@ export async function importBackup(text) {
 }
 
 export async function resetAll() {
-  const keep = { name: state.name, settings: state.settings, onboarded: true };
+  const keep = { name: state.name, opId: state.opId, settings: state.settings, onboarded: true };
   await clearPhotos();
   replaceState(keep);
 }
