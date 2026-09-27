@@ -251,7 +251,7 @@ function startTrack(name) {
     step = 0;
     nextTime = Math.max(ctx.currentTime + 0.05, stingerUntil);
     if (!timer) timer = setInterval(tick, 25);
-    fadeBus(musicBus, level() * 0.55, 0.8);
+    fadeBus(musicBus, level() * 0.85, 0.8);
   };
   if (track) { fadeBus(musicBus, 0, 0.35); track = null; setTimeout(go, 380); } else go();
 }
@@ -297,18 +297,67 @@ function ambience() {
   ambTimer = setTimeout(ambience, night ? 900 + Math.random() * 1800 : 2500 + Math.random() * 5000);
 }
 
-// ---------------------------------------------------------------- public API
-// Browsers only allow audio after a user gesture: call this from the first tap.
-export function unlock() {
-  if (!context()) return;
-  build();
-  if (ctx.state === 'suspended') ctx.resume();
-  if (unlocked) return;
-  unlocked = true;
-  fadeBus(ambBus, enabled ? volume * 0.8 : 0, 1);
-  if (scene) startTrack(scene);
-  ambience();
+// ---------------------------------------------------------------- iPhone audio
+// iOS mutes Web Audio when the ring/silent switch is on. Asking for a
+// "playback" audio session (iOS 17+), or playing a looping silent <audio>
+// tag on older iOS, lets the soundtrack play like a music app does.
+let silentTag = null;
+function silentWavURL() {
+  const n = 4000;
+  const buf = new ArrayBuffer(44 + n);
+  const v = new DataView(buf);
+  const w = (o, str) => [...str].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  w(36, 'data'); v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
+function iosPlayback() {
+  try { if (navigator.audioSession) { navigator.audioSession.type = 'playback'; return; } } catch { /* ignore */ }
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!ios || silentTag) return;
+  silentTag = document.createElement('audio');
+  silentTag.setAttribute('x-webkit-airplay', 'deny');
+  silentTag.setAttribute('playsinline', '');
+  silentTag.loop = true;
+  silentTag.src = silentWavURL();
+  silentTag.play().catch(() => { silentTag = null; });
+}
+
+// ---------------------------------------------------------------- public API
+// Browsers only start audio from a finished tap or click; call this from
+// those events (it's cheap to call again). Resolves true once sound is live.
+export function unlock() {
+  const c = context();
+  if (!c) return Promise.resolve(false);
+  build();
+  if (unlocked && c.state === 'running') return Promise.resolve(true);
+  iosPlayback();
+  try { // a 1-sample silent sound started inside the gesture wakes older iOS
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, 22050);
+    src.connect(c.destination);
+    src.start(0);
+  } catch { /* ignore */ }
+  const ready = c.state === 'running' ? Promise.resolve() : c.resume();
+  return Promise.resolve(ready).then(() => {
+    if (c.state !== 'running') return false;
+    if (!unlocked) {
+      unlocked = true;
+      liveAt = performance.now();
+      fadeBus(ambBus, enabled ? volume * 0.8 : 0, 1);
+      if (scene && enabled) startTrack(scene);
+      ambience();
+    }
+    return true;
+  }).catch(() => false);
+}
+let liveAt = 0;
+// When sound first came alive (so the tap that started it isn't also read as a toggle).
+export const liveSince = () => liveAt;
+export const isPlaying = () => !!(unlocked && enabled && ctx && ctx.state === 'running');
 
 export function setScene(name) {
   scene = name;
@@ -318,20 +367,24 @@ export function setScene(name) {
 export function setEnabled(on) {
   enabled = on;
   if (!unlocked) return;
-  if (on) { track = null; startTrack(scene || 'day'); fadeBus(ambBus, volume * 0.8); ambience(); } else { fadeBus(musicBus, 0, 0.3); fadeBus(ambBus, 0, 0.3); }
+  if (on) { track = null; startTrack(scene || 'day'); fadeBus(ambBus, volume * 0.8); ambience(); } else {
+    fadeBus(musicBus, 0, 0.3);
+    fadeBus(ambBus, 0, 0.3);
+    setTimeout(() => { if (!enabled) { track = null; clearTimeout(ambTimer); } }, 350);
+  }
 }
 
 export function setVolume(v) {
   volume = Math.max(0, Math.min(1, v));
   if (!unlocked || !enabled) return;
-  fadeBus(musicBus, level() * 0.55, 0.15);
+  fadeBus(musicBus, level() * 0.85, 0.15);
   fadeBus(ambBus, volume * 0.8, 0.15);
 }
 
 // Softens the music under scans and narration.
 export function duck(on) {
   ducked = on;
-  if (unlocked && enabled && track) fadeBus(musicBus, level() * 0.55, on ? 0.25 : 0.8);
+  if (unlocked && enabled && track) fadeBus(musicBus, level() * 0.85, on ? 0.25 : 0.8);
 }
 
 // A short jingle that replaces the current theme; the next setScene() resumes music.
@@ -355,5 +408,5 @@ export function stinger(kind) {
 
 export function suspend(on) {
   if (!ctx) return;
-  if (on) ctx.suspend(); else if (unlocked) ctx.resume();
+  if (on) { ctx.suspend(); if (silentTag) silentTag.pause(); } else if (unlocked) { ctx.resume().catch(() => {}); if (silentTag) silentTag.play().catch(() => {}); }
 }

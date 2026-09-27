@@ -1337,6 +1337,13 @@ html { background: var(--sky-bot); }
 .tcx { color: color-mix(in srgb, var(--tc) var(--tc-amt), var(--tc-mix)); }
 .viewfinder { border: 6px solid var(--panel); box-shadow: none; }
 .controls { margin-top: 22px; }
+.home-btns { display: flex; gap: 8px; }
+.music-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.music-btn .mute { display: none; }
+.music-btn.off { color: var(--dim-2); }
+.music-btn.off .mute { display: inline; stroke: var(--coral); }
+.music-btn.live svg { animation: notebob 1.2s ease-in-out infinite; }
+@keyframes notebob { 50% { transform: translateY(-2px) rotate(-6deg); } }
 .seg-pick { display: inline-flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--bar-bg); }
 .seg-pick button { border: 0; background: none; padding: 6px 10px; border-radius: 9px; font-family: var(--display); font-size: 11px; color: var(--dim); }
 .seg-pick button[aria-pressed="true"] { background: var(--panel); color: var(--hi); box-shadow: 0 2px 0 var(--press); }
