@@ -5,54 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>WildDex</title>
   <meta name="description" content="Scan real animals and collect them as cards — a field-scanner collectible game.">
-  <meta name="theme-color" content="#0D0E10">
+  <meta name="theme-color" content="#242427">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="preload" href="fonts/doto-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/michroma-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="topline">
-        <svg class="shape dots3" viewBox="0 0 22 22" aria-hidden="true"><g><circle cx="3" cy="3" r="2"/><circle cx="11" cy="3" r="2"/><circle cx="19" cy="3" r="2"/><circle cx="3" cy="11" r="2"/><circle cx="19" cy="11" r="2"/><circle cx="3" cy="19" r="2"/><circle cx="11" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></g></svg>
-        <span class="pill-arrow" aria-hidden="true"><svg viewBox="0 0 40 8"><path d="M2 4h30m-4-3 4 3-4 3"/></svg></span>
-        <span class="brand">wild<i>__</i>dex</span>
-        <span class="wallet" title="Data shards"><b id="shards">0</b><small>◆</small></span>
+      <div class="hud-head">
+        <div class="brandblock">
+          <p class="brand">WILDDEX</p>
+          <p class="sys">// SYS: FIELD_LINK_V2.6 <i>|</i> SECTOR 07</p>
+        </div>
+        <div class="lvl" role="img" aria-label="Operator level">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <circle class="lvl-track" cx="32" cy="32" r="27"/>
+            <circle class="lvl-arc" id="lvl-arc" cx="32" cy="32" r="27"/>
+            <circle class="lvl-inner" cx="32" cy="32" r="21"/>
+            <path class="lvl-ticks" d="M32 1v4M32 59v4M1 32h4M59 32h4"/>
+          </svg>
+          <b id="op-level">1</b>
+          <small>level</small>
+        </div>
+        <div class="meters" id="meters">
+          <div class="meter-row"><span>credits <b id="shards">0</b> ◆</span><i class="seg"><em id="shards-bar"></em></i></div>
+          <div class="meter-row"><i class="seg"><em id="cards-bar"></em></i><span>cards <b id="count-num">0</b> / <b id="count-total">0</b></span></div>
+        </div>
       </div>
       <nav class="tabs" aria-label="Sections">
-        <button type="button" data-tab="scan" aria-current="page">Scan</button>
-        <button type="button" data-tab="binder">Binder</button>
-        <button type="button" data-tab="ops">Ops<i class="badge" id="ops-badge" hidden></i></button>
-        <button type="button" data-tab="id">ID</button>
+        <button type="button" data-tab="scan" aria-current="page">scanner</button>
+        <button type="button" data-tab="binder">inventory</button>
+        <button type="button" data-tab="ops">ops<i class="badge" id="ops-badge" hidden></i></button>
+        <button type="button" data-tab="id">id</button>
       </nav>
+      <div class="deco-line" aria-hidden="true">
+        <svg viewBox="0 0 400 14" preserveAspectRatio="none"><path d="M0 2H150L162 12H400"/></svg>
+        <div class="wave" data-bars="30"></div>
+      </div>
     </header>
 
     <main>
       <!-- SCAN -->
       <section class="view" data-view="scan">
-        <div class="masthead">
-          <p class="eyebrow">Field scanner</p>
-          <h1 class="dot-title">WILD<span class="wave" aria-hidden="true">≋</span>DEX</h1>
-          <p class="formats">Scan <i>.</i> Collect <i>.</i> Level <i>.</i> Complete</p>
-          <div class="rule" aria-hidden="true">
-            <svg class="shape" viewBox="0 0 20 12"><path d="M1 12V4M5 12V1M9 12V6M13 12V2M17 12V7"/></svg>
-            <span>for all fauna</span>
-            <svg class="shape" viewBox="0 0 36 10"><path d="M1 9 5 1l4 8M9 9l4-8 4 8M17 9l4-8 4 8M25 9l4-8 4 8"/></svg>
-            <span>high signal</span>
-            <span class="xs">xxxxx</span>
-            <svg class="shape rings3" viewBox="0 0 34 12"><circle cx="6" cy="6" r="5"/><circle cx="17" cy="6" r="5"/><circle cx="28" cy="6" r="5"/></svg>
-          </div>
-        </div>
-
-        <div class="statrow">
-          <div><small>Cards</small><b><span id="count-num">000</span><i id="count-total">/000</i></b></div>
-          <div><small>Streak</small><b><span id="streak-num">0</span><i>d</i></b></div>
-          <div><small>Level</small><b id="op-level">01</b></div>
+        <div class="screen-head">
+          <div><h1 class="screen-title">Scanner</h1><p class="sys">// OPTICAL_ID_UNIT <i>|</i> LIVE_MODE</p></div>
+          <div class="wave" data-bars="22"></div>
         </div>
 
         <div class="viewfinder" id="viewfinder">
@@ -105,58 +108,60 @@
         </div>
 
         <section class="recent" id="recent-wrap" hidden>
-          <div class="section-head"><h2>Recent pulls</h2><svg class="shape" viewBox="0 0 36 10" aria-hidden="true"><path d="M1 5c3-5 5-5 8 0s5 5 8 0 5-5 8 0 5 5 8 0"/></svg></div>
+          <div class="section-head"><h2>Recent pulls</h2><div class="wave" data-bars="16"></div></div>
           <div class="recent-strip" id="recent"></div>
         </section>
+        <footer class="hints"><div class="wave" data-bars="26"></div><p>[tap] scan <i>|</i> [slide] verify <i>|</i> [light] torch</p></footer>
       </section>
 
-      <!-- BINDER -->
+      <!-- INVENTORY -->
       <section class="view" data-view="binder" hidden>
-        <div class="masthead">
-          <p class="eyebrow">Card collection</p>
-          <h1 class="dot-title">BINDER</h1>
-          <p class="formats" id="binder-sub"></p>
+        <div class="screen-head">
+          <div><h1 class="screen-title">Inventory</h1><p class="sys">// CARD_BINDER <i>|</i> <span id="binder-sub"></span></p></div>
+          <div class="wave" data-bars="22"></div>
         </div>
-        <div class="meter"><span id="binder-bar"></span></div>
 
         <div class="filters">
           <div class="chips" id="set-chips" role="tablist" aria-label="Sectors"></div>
           <div class="type-filter" id="type-chips" aria-label="Filter by affinity"></div>
           <div class="filter-row">
-            <label class="select"><span>Sort</span>
+            <label class="select"><span>sort</span>
               <select id="sort">
-                <option value="no">Number</option>
-                <option value="rarity">Rarity</option>
-                <option value="level">Level</option>
-                <option value="pwr">Power</option>
-                <option value="recent">Recent</option>
+                <option value="no">number</option>
+                <option value="rarity">rarity</option>
+                <option value="level">level</option>
+                <option value="pwr">power</option>
+                <option value="recent">recent</option>
               </select>
             </label>
-            <label class="check"><input type="checkbox" id="owned-only"> Owned only</label>
+            <label class="check"><input type="checkbox" id="owned-only"> owned only</label>
           </div>
         </div>
-        <div class="card-grid" id="grid"></div>
+
+        <section class="inv-detail chamfer" id="inv-detail" aria-live="polite"></section>
+        <div class="slot-grid" id="grid"></div>
         <p class="empty" id="grid-empty" hidden>No cards match these filters yet.</p>
+        <footer class="hints"><div class="wave" data-bars="26"></div><p>[tap] select <i>|</i> [tap×2] open card <i>|</i> [filter] sort</p></footer>
       </section>
 
       <!-- OPS -->
       <section class="view" data-view="ops" hidden>
-        <div class="masthead">
-          <p class="eyebrow">Daily operations</p>
-          <h1 class="dot-title">OPS</h1>
-          <p class="formats">Missions <i>.</i> Streaks <i>.</i> Badges</p>
+        <div class="screen-head">
+          <div><h1 class="screen-title">Operations</h1><p class="sys">// DAILY_ORDERS <i>|</i> STREAK <i>|</i> BADGES</p></div>
+          <div class="wave" data-bars="22"></div>
         </div>
         <div id="ops"></div>
+        <footer class="hints"><div class="wave" data-bars="26"></div><p>[claim] rewards <i>|</i> [scan] daily <i>|</i> [collect] badges</p></footer>
       </section>
 
       <!-- ID -->
       <section class="view" data-view="id" hidden>
-        <div class="masthead">
-          <p class="eyebrow">Operator profile</p>
-          <h1 class="dot-title">ID</h1>
-          <p class="formats" id="rank-sub"></p>
+        <div class="screen-head">
+          <div><h1 class="screen-title">Operator</h1><p class="sys">// PROFILE <i>|</i> <span id="rank-sub"></span></p></div>
+          <div class="wave" data-bars="22"></div>
         </div>
         <div id="profile"></div>
+        <footer class="hints"><div class="wave" data-bars="26"></div><p>[edit] callsign <i>|</i> [export] backup <i>|</i> [config] sound</p></footer>
       </section>
     </main>
   </div>

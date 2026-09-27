@@ -192,7 +192,7 @@ function enableTilt(el) {
 
 function burst(stage, rarity) {
   if (reducedMotion()) return;
-  const colors = ['#FF7972', '#F5B7B2', '#F3F8F5'];
+  const colors = ['#9B7CD8', '#CDBDF0', '#F1F1F4'];
   const b = document.createElement('div');
   b.className = 'burst';
   const n = 14 + rarity * 8;
@@ -719,12 +719,20 @@ function unclaimedMissions() {
 let currentTab = 'scan';
 function refreshAll(bumpWallet = false) {
   const s = state();
-  $('#count-num').textContent = pad(caughtKeys().length);
-  $('#count-total').textContent = `/${ENTRIES.length}`;
-  $('#streak-num').textContent = game.liveStreak(s);
-  $('#op-level').textContent = pad(opLevel(), 2);
+  const n = caughtKeys().length;
+  $('#count-num').textContent = pad(n);
+  $('#count-total').textContent = ENTRIES.length;
+  $('#cards-bar').style.width = `${(n / ENTRIES.length) * 100}%`;
   $('#shards').textContent = s.shards || 0;
-  if (bumpWallet) { const w = $('.wallet'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
+  // credits bar: how close the wallet is to affording an intel decrypt
+  $('#shards-bar').style.width = `${Math.min(100, ((s.shards || 0) / game.DECRYPT_COST) * 100)}%`;
+  const lvl = opLevel();
+  $('#op-level').textContent = lvl;
+  const lo = 20 * (lvl - 1) ** 2;
+  const hi = 20 * lvl ** 2;
+  const C = 2 * Math.PI * 27;
+  $('#lvl-arc').style.strokeDashoffset = C * (1 - Math.max(0.02, (xp() - lo) / (hi - lo)));
+  if (bumpWallet) { const w = $('#meters'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump'); }
   $('#ops-badge').hidden = !unclaimedMissions();
   renderRecent();
   if (currentTab === 'binder') renderBinder();
@@ -743,17 +751,16 @@ function renderRecent() {
 }
 
 // ---- binder
-const binder = { set: 'all', type: null, sort: 'no', owned: false };
+const binder = { set: 'all', type: null, sort: 'no', owned: false, selected: null };
 function renderBinder() {
   const s = state();
   const n = caughtKeys().length;
-  $('#binder-sub').innerHTML = `${n}<i>/</i>${ENTRIES.length} cards <i>.</i> ${SETS.filter((x) => x.entries.every((e) => s.caught[e.k])).length} sectors`;
-  $('#binder-bar').style.width = `${(n / ENTRIES.length) * 100}%`;
+  $('#binder-sub').textContent = `${n}/${ENTRIES.length} · ${SETS.filter((x) => x.entries.every((e) => s.caught[e.k])).length} SECTORS`;
 
   const chip = (id, label, got, total) => `<button type="button" class="chip${got === total && id !== 'all' ? ' done' : ''}" role="tab" data-set="${id}" aria-selected="${binder.set === id}">${label} <small>${got}/${total}</small></button>`;
-  $('#set-chips').innerHTML = chip('all', 'All', n, ENTRIES.length) + SETS.map((set) => {
+  $('#set-chips').innerHTML = chip('all', 'all', n, ENTRIES.length) + SETS.map((set) => {
     const got = set.entries.filter((e) => s.caught[e.k]).length;
-    return chip(set.id, `${set.icon} ${esc(set.name)}`, got, set.entries.length);
+    return chip(set.id, `${set.icon} ${esc(set.name.toLowerCase())}`, got, set.entries.length);
   }).join('');
   $('#type-chips').innerHTML = `<button type="button" class="all" data-type="" aria-pressed="${!binder.type}">ALL</button>` + TYPE_IDS.map((t) =>
     `<button type="button" data-type="${t}" style="--tc:${TYPES[t].color}" aria-pressed="${binder.type === t}" title="${TYPES[t].name} — ${TYPES[t].desc}">${glyph(t)}</button>`).join('');
@@ -770,9 +777,67 @@ function renderBinder() {
     recent: (a, b) => (s.caught[b.k]?.last || 0) - (s.caught[a.k]?.last || 0) || a.no - b.no,
   };
   list.sort(sorters[binder.sort]);
-  $('#grid').innerHTML = list.map((e) => cardHTML(e)).join('');
+  if (!list.some((e) => e.k === binder.selected)) binder.selected = (list.find((e) => s.caught[e.k]) || list[0])?.k || null;
+  const rc = { 1: 'var(--r1)', 2: 'var(--r2)', 3: 'var(--r3)', 4: 'var(--r4)' };
+  $('#grid').innerHTML = list.map((e) => {
+    const rec = s.caught[e.k];
+    const intel = !rec && s.intel[e.k];
+    const cls = `slot${rec ? '' : ' locked'}${intel ? ' intel' : ''}`;
+    return `<button type="button" class="${cls}" data-slot="${e.k}" style="--rc:${rc[e.r]}" aria-pressed="${binder.selected === e.k}"
+      aria-label="#${pad(e.no)} ${rec || intel ? esc(e.n) : 'unknown'}${rec ? `, seen ${rec.count} times` : ', not captured'}">
+      <span class="no">${pad(e.no)}</span><i class="rar"></i>
+      <img src="${artURL(e)}" alt="" loading="lazy" draggable="false">
+      ${rec ? `<span class="qty">x${rec.count}</span>` : ''}
+    </button>`;
+  }).join('');
   $('#grid-empty').hidden = list.length > 0;
+  $('#inv-detail').hidden = !binder.selected;
+  if (binder.selected) renderInvDetail(BY_KEY[binder.selected]);
 }
+
+function renderInvDetail(e) {
+  const s = state();
+  const rec = s.caught[e.k];
+  const intel = !rec && s.intel[e.k];
+  const known = rec || intel;
+  const lv = rec ? game.levelFor(rec.count) : 1;
+  const st = game.statsFor(e, lv);
+  const types = AFFINITY[e.k].map((t) => TYPES[t].name).join(' / ');
+  $('#inv-detail').innerHTML = `
+    <p class="inv-name">${known ? `${esc(e.n)} <small>// ${esc(e.s)}</small>` : `? ? ? <small>// SIGNAL #${pad(e.no)} ENCRYPTED</small>`}</p>
+    <div class="inv-art${rec ? '' : ' locked'}${intel ? ' intel' : ''}">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <g class="spin"><circle cx="50" cy="50" r="47" stroke-dasharray="3 5"/></g>
+        <circle cx="50" cy="50" r="40"/><circle cx="50" cy="50" r="33" class="accent" stroke-dasharray="40 170" transform="rotate(-60 50 50)"/>
+        <circle cx="50" cy="50" r="26"/>
+      </svg>
+      <img src="${artURL(e)}" alt="">
+    </div>
+    <div class="inv-info">
+      <p class="inv-kind">${RARITY[e.r].name}${rec ? ` · LV ${lv}` : ''}<span>${types}</span></p>
+      <div class="inv-stats">${game.STAT_KEYS.map((k) => `<div class="inv-stat"><b>${rec ? `+${st[k]}` : '??'}</b>${k}<i class="seg"><em style="width:${rec ? st[k] : 0}%"></em></i></div>`).join('')}</div>
+    </div>
+    <div class="inv-use">
+      <p>${rec ? `[tap] open card · pwr ${st.pwr}` : intel ? `[scan] find in ${esc(e.h.toLowerCase())}` : '[tap] view signal'}</p>
+      <button type="button" class="btn small primary" data-open="${e.k}">Open</button>
+    </div>`;
+}
+
+$('#grid').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-slot]');
+  if (!b) return;
+  const key = b.dataset.slot;
+  if (binder.selected === key) { openEntry(key); return; } // second tap opens the full card
+  binder.selected = key;
+  sfx.click();
+  $$('#grid .slot').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.slot === key)));
+  renderInvDetail(BY_KEY[key]);
+});
+$('#inv-detail').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-open]');
+  if (b) openEntry(b.dataset.open);
+});
+
 $('#set-chips').addEventListener('click', (ev) => {
   const c = ev.target.closest('.chip');
   if (!c) return;
@@ -804,7 +869,7 @@ function renderOps() {
   const weekDots = Array.from({ length: 7 }, (_, i) => `<i class="${i < Math.min(streak, 7) ? 'on' : ''}"></i>`).join('');
 
   $('#ops').innerHTML = `
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Daily orders</h3><small>resets at midnight</small></div>
       ${d.missions.map((m) => {
         const p = Math.min(m.goal, d.progress[m.id] || 0);
@@ -819,13 +884,13 @@ function renderOps() {
       <p class="allclear">${allClaimed ? 'All orders cleared today ✓' : `Clear all three for a +${game.ALL_CLEAR_BONUS}◆ bonus`}</p>
     </section>
 
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Streak</h3><small>best ${s.streak?.best || 0} days</small></div>
       <div class="streak"><div class="big">${pad(streak, 2)}</div>
         <div><p>Log a sighting every day to grow your streak. Each day pays <b>+5◆ × streak</b> (max 50).</p><div class="days">${weekDots}</div></div></div>
     </section>
 
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Affinities</h3><small>owned / total</small></div>
       <div class="typegrid">${TYPE_IDS.map((t) => {
         const total = ENTRIES.filter((e) => AFFINITY[e.k].includes(t)).length;
@@ -833,7 +898,7 @@ function renderOps() {
       }).join('')}</div>
     </section>
 
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Badges</h3><small>${list.filter((a) => a.done).length}/${list.length}</small></div>
       <div class="achv">${list.map((a) => `<div class="${a.done ? 'done' : ''}"><div class="hex">${ACHV_ICON}</div><b>${a.name}</b>${a.desc}</div>`).join('')}</div>
     </section>`;
@@ -864,7 +929,7 @@ function renderProfile() {
   const n = caughtKeys().length;
   const [, rankName] = rankFor(n);
   const next = RANKS.find((r) => r[0] > n);
-  $('#rank-sub').innerHTML = `Clearance <i>.</i> ${esc(rankName)}`;
+  $('#rank-sub').textContent = `CLEARANCE: ${rankName.toUpperCase()}`;
   const forms = Object.values(s.caught).reduce((a, rec) => a + (rec.forms ? rec.forms.length : 0), 0);
   const byRarity = [1, 2, 3, 4].map((r) => {
     const all = ENTRIES.filter((e) => e.r === r);
@@ -872,7 +937,7 @@ function renderProfile() {
   });
 
   $('#profile').innerHTML = `
-    <section class="card-box idcard">
+    <section class="card-box chamfer idcard">
       <div class="id-top"><span>OPERATOR</span><b>OP-${operatorId()}</b></div>
       <label for="collector-name">Callsign</label>
       <input id="collector-name" maxlength="18" placeholder="Enter name" value="${esc(s.name)}" autocomplete="nickname" spellcheck="false">
@@ -888,7 +953,7 @@ function renderProfile() {
       <div class="barcode" aria-hidden="true"></div>
     </section>
 
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Config</h3></div>
       <label class="toggle"><span>Voice<small>Narrate new cards aloud</small></span>
         <input type="checkbox" class="switch" data-setting="voice" ${s.settings.voice ? 'checked' : ''}></label>
@@ -896,7 +961,7 @@ function renderProfile() {
         <input type="checkbox" class="switch" data-setting="sound" ${s.settings.sound ? 'checked' : ''}></label>
     </section>
 
-    <section class="card-box">
+    <section class="card-box chamfer">
       <div class="box-head"><h3>Backup</h3></div>
       <p class="about">Your binder lives only on this device. Export a backup to move it to a new phone.</p>
       <div class="btn-row">
@@ -906,7 +971,7 @@ function renderProfile() {
       </div>
     </section>
 
-    <section class="card-box about">
+    <section class="card-box chamfer about">
       <div class="box-head"><h3>About</h3></div>
       <p>Recognition runs entirely on your phone with a MobileNet v2 neural net — photos never leave your device, and scanning works offline once loaded.</p>
       <p>${ENTRIES.length} cards across ${SETS.length} sectors and ${TYPE_IDS.length} affinities. Works best with one animal, close and well lit. Each scan checks for real depth that moves with your hand (parallax), so photos, prints, screens and videos are rejected. Pigeons, crows, deer and giraffes aren't in the net's vocabulary yet.</p>
@@ -1035,7 +1100,7 @@ async function bootSequence() {
   let skip = false;
   boot.addEventListener('click', () => { skip = true; }, { once: true });
   const lines = [
-    '<span class="hl">WILD≋DEX</span>',
+    '<span class="hl">WILDDEX</span>',
     `<span class="ok">●</span> card database ... ${ENTRIES.length} signatures`,
     `<span class="ok">●</span> operator binder .. ${caughtKeys().length} captured`,
     `<span class="ok">●</span> affinity matrix .. ${TYPE_IDS.length} types`,
@@ -1054,7 +1119,23 @@ async function bootSequence() {
   boot.hidden = true;
 }
 
+// Decorative waveform bars (fixed pattern per element so they don't jitter).
+function drawWaves() {
+  $$('.wave').forEach((el, n) => {
+    const count = Number(el.dataset.bars) || 24;
+    let x = 97 + n * 31;
+    const bars = [];
+    for (let i = 0; i < count; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      const h = 25 + ((x >>> 16) % 75) * (0.55 + 0.45 * Math.sin((i / count) * Math.PI));
+      bars.push(`<i style="height:${Math.round(Math.min(100, h))}%"></i>`);
+    }
+    el.innerHTML = bars.join('');
+  });
+}
+
 async function boot() {
+  drawWaves();
   let tab = 'scan';
   try { tab = sessionStorage.getItem('wilddex.tab') || 'scan'; } catch { /* ignore */ }
   if (!['scan', 'binder', 'ops', 'id'].includes(tab)) tab = 'scan';

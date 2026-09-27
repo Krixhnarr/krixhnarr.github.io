@@ -26,9 +26,10 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
   missions and streaks (`js/game.js`).
 - **Storage**: progress in `localStorage`, capture photos in IndexedDB, with
   backup/restore on the ID screen.
-- **Look**: cyber-Y2K dot-matrix UI (self-hosted Doto + JetBrains Mono) with accents from
-  the *Diaethria neglecta* butterfly palette — `#F3F8F5`, `#F5B7B2`,
-  `#FF7972`, `#434448`.
+- **Look**: game-inventory HUD — charcoal panels, lavender accent, wide
+  Michroma headings (self-hosted with JetBrains Mono), level ring, stat bars,
+  waveform decorations and chamfered frames; the Inventory tab is a slot grid
+  with a selected-item detail panel.
 
 Plain static files, no build step. When changing app files, bump `VERSION`
 in `sw.js` so installed copies pick up the update.

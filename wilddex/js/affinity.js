@@ -1,7 +1,9 @@
 // Affinity types — WildDex's answer to Pokémon types. Every animal has one
-// or two, shown as HUD-style glyphs. Colours stay inside the app palette.
+// or two, shown as HUD-style glyphs. Colours stay inside the app palette
+// (keys are historical names: coral = lavender accent, blush = light lavender).
 
-const C = { coral: '#FF7972', blush: '#F5B7B2', mint: '#F3F8F5', sage: '#A9BDB3', ash: '#A3A6AD' };
+// Lavender / charcoal palette from the inventory reference.
+const C = { coral: '#9B7CD8', blush: '#CDBDF0', mint: '#E6E6EB', sage: '#A6A6B0', ash: '#7E7E88' };
 
 // Wedge of a ring, for the trefoil glyphs.
 function wedge(cx, cy, r1, r2, a0, a1) {
