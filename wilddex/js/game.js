@@ -32,7 +32,7 @@ const MOD = {
   volt: { spd: 16, atk: 4 },
   ancient: { def: 16, hp: 8 },
 };
-function hash(str) {
+export function hash(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
@@ -49,6 +49,50 @@ export function statsFor(e, level = 1) {
   });
   out.pwr = out.hp + out.atk + out.def + out.spd;
   return out;
+}
+
+// ---- operator XP: level L starts at 20·(L-1)² XP
+export const levelForXP = (xp) => 1 + Math.floor(Math.sqrt(Math.max(0, xp) / 20));
+export const xpForLevel = (level) => 20 * (level - 1) ** 2;
+// Adds XP and returns the levels crossed; the caller hands out level-up rewards.
+export function grantXP(state, amount) {
+  const before = levelForXP(state.xp || 0);
+  state.xp = (state.xp || 0) + Math.max(0, Math.round(amount));
+  return { before, after: levelForXP(state.xp), gained: amount };
+}
+export const levelUpCredits = (level) => 10 * level;
+export const SIGHTING_XP = 5;
+export const MISSION_XP = 10;
+export const EVENT_XP = 40;
+
+// ---- sync grade: how cleanly the lock-on sweep went (confidence, depth, motion)
+export const GRADES = {
+  S: { credits: 20, xp: 15, name: 'Perfect sync' },
+  A: { credits: 12, xp: 10, name: 'Strong sync' },
+  B: { credits: 6, xp: 5, name: 'Good sync' },
+  C: { credits: 0, xp: 0, name: 'Weak sync' },
+};
+export function syncGrade(conf, depth) {
+  const c = Math.min(1, (conf || 0) / 0.8);
+  const d = depth && depth.tracks ? Math.min(1, (depth.parallax || 0) / depth.tracks / 0.25) : 0.4;
+  const range = depth ? depth.range || 0 : 0;
+  const m = !depth ? 0.5 : range < 12 ? range / 12 : range > 90 ? Math.max(0.4, 1 - (range - 90) / 90) : 1;
+  const q = 0.45 * c + 0.35 * d + 0.2 * m;
+  const grade = q >= 0.85 ? 'S' : q >= 0.7 ? 'A' : q >= 0.5 ? 'B' : 'C';
+  return { grade, q: +q.toFixed(2), ...GRADES[grade] };
+}
+
+// ---- holo (shiny) variants: rare foil pulls, better odds on a perfect sync
+export const HOLO_ODDS = 40;
+export const holoChance = (grade) => (grade === 'S' ? 2 : 1) / HOLO_ODDS;
+export const HOLO_DUPE_CREDITS = 30;
+
+// ---- card stars: half a star per level, five stars at Lv 10
+export function starsHTML(level) {
+  return Array.from({ length: 5 }, (_, i) => {
+    const f = Math.max(0, Math.min(2, level - i * 2));
+    return `<i class="star" style="--f:${f * 50}%"></i>`;
+  }).join('');
 }
 
 // ---- dates
@@ -204,6 +248,11 @@ export function achievements(state) {
     { id: 'event', name: 'Event Champion', desc: 'Complete a weekly event', done: (state.eventsWon || 0) >= 1 },
     { id: 'social', name: 'Field Partner', desc: 'Compare with a friend', done: (state.compared || 0) >= 1 },
     { id: 'mapper', name: 'Cartographer', desc: 'Tag 10 capture locations', done: caught.filter((k) => state.caught[k].loc).length >= 10 },
+    { id: 'holo', name: 'Holo Hunter', desc: 'Pull a holo card', done: caught.some((k) => state.caught[k].holo) },
+    { id: 'victory', name: 'First Victory', desc: 'Win a battle', done: (state.battle?.wins || 0) >= 1 },
+    { id: 'rivals', name: 'Rival Slayer', desc: 'Defeat 5 daily rivals', done: (state.battle?.rivals || 0) >= 5 },
+    { id: 'perfect', name: 'Perfect Sync', desc: 'Get an S grade on a capture', done: (state.bestGrade || '') === 'S' },
+    { id: 'stylist', name: 'Stylist', desc: 'Unlock a new card frame', done: (state.locker?.frames?.length || 0) > 1 },
   ];
   return { list, byType };
 }

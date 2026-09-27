@@ -7,7 +7,7 @@ const DB_NAME = 'wilddex';
 const STORE = 'photos';
 
 const fresh = () => ({
-  caught: {}, // key -> { first, last, count, forms: [classIdx], photo: bool }
+  caught: {}, // key -> { first, last, count, forms: [classIdx], photo: bool, holo?: ts }
   scans: 0,
   shards: 0,
   intel: {}, // key -> true once a locked card's intel is decrypted with shards
@@ -15,7 +15,7 @@ const fresh = () => ({
   streak: null,
   name: '',
   onboarded: false,
-  settings: { voice: true, sound: true, tilt: true, location: false },
+  settings: { voice: true, sound: true, tilt: true, location: false, haptics: true },
 });
 
 let state = fresh();
