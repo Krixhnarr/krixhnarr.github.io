@@ -11,6 +11,7 @@ import * as battle from './battle.js';
 import * as loot from './loot.js';
 import * as music from './music.js';
 import * as FX from './fx.js';
+import * as account from './account.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -1530,6 +1531,7 @@ function renderProfile() {
       <div class="barcode" aria-hidden="true"></div>
     </section>
 
+    ${accountHTML()}
     ${supplyHTML()}
     ${lockerHTML()}
 
@@ -1655,6 +1657,222 @@ $('#profile').addEventListener('click', async (ev) => {
   }
   if (act.dataset.act === 'intro') showIntro();
 });
+
+// ---- accounts & cloud save (optional; only when Firebase is configured)
+const SYNC_KEY = 'wilddex.sync'; // which account this phone last synced with
+const syncMeta = () => { try { return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch { return {}; } };
+const setSyncMeta = (m) => { try { localStorage.setItem(SYNC_KEY, JSON.stringify(m)); } catch { /* ignore */ } };
+let user = null;
+let syncState = 'idle'; // idle | syncing | synced | error | offline | choosing
+let syncTimer = null;
+const hasProgress = (st) => Object.keys(st?.caught || {}).length > 0 || (st?.xp || 0) > 0;
+const GOOGLE_G = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.2C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.6 28.5c-.5-1.4-.8-2.9-.8-4.5s.3-3.1.8-4.5l-7.9-6.2C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>';
+const APPLE_LOGO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.3 1.2 9.7.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.5-1-2.5-3.8zM14 5.5c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.1-.6 2.8-1.4z"/></svg>';
+
+function accountHTML() {
+  if (!account.enabled()) return '';
+  if (!user) {
+    return `<section class="card-box chamfer account">
+      <div class="box-head"><h3>Account</h3><small>optional</small></div>
+      <p class="about">Sign in to back up your cards and carry them to any phone.</p>
+      <div class="btn-row"><button type="button" class="btn small primary" data-auth="signin">Sign in</button><button type="button" class="btn small" data-auth="signup">Create account</button></div>
+    </section>`;
+  }
+  const name = user.displayName || (user.email || 'Operator').split('@')[0];
+  const needsVerify = user.email && !user.emailVerified && user.providerData.some((p) => p.providerId === 'password');
+  return `<section class="card-box chamfer account">
+    <div class="box-head"><h3>Account</h3><small>signed in</small></div>
+    <div class="acct-row"><span class="avatar">${user.photoURL ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc(name[0].toUpperCase())}</span>
+      <div><b>${esc(name)}</b><small>${esc(user.email || 'signed in')}</small></div></div>
+    <p class="sync-line" id="sync-line">${syncLine()}</p>
+    ${needsVerify ? '<p class="about verify">Check your inbox to verify your email. <button type="button" class="link" data-acct="verify">Resend</button></p>' : ''}
+    <div class="btn-row"><button type="button" class="btn small" data-acct="sync">Sync now</button><button type="button" class="btn small" data-acct="signout">Sign out</button></div>
+    <p class="about fine">Card photos stay on this phone. <button type="button" class="link" data-acct="delete">Delete account</button></p>
+  </section>`;
+}
+function syncLine() {
+  const at = syncMeta().at;
+  const ago = at ? Math.max(0, Math.round((Date.now() - at) / 60000)) : null;
+  return {
+    idle: '<i class="dot"></i>Cloud save ready',
+    syncing: '<i class="dot busy"></i>Saving to cloud…',
+    synced: `<i class="dot ok"></i>Saved to cloud${ago != null ? ` · ${ago < 1 ? 'just now' : `${ago} min ago`}` : ''}`,
+    error: '<i class="dot bad"></i>Couldn\'t save — will retry',
+    offline: '<i class="dot bad"></i>Offline — saves when you\'re back online',
+    choosing: '<i class="dot busy"></i>Choose which save to keep',
+  }[syncState];
+}
+function renderAccountStatus() {
+  const el = $('#sync-line');
+  if (el) el.innerHTML = syncLine();
+}
+
+async function pushNow() {
+  if (!user) return;
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  syncState = 'syncing';
+  renderAccountStatus();
+  try {
+    await account.writeSave(user.uid, state());
+    setSyncMeta({ uid: user.uid, at: Date.now() });
+    syncState = 'synced';
+  } catch (err) {
+    syncState = navigator.onLine ? 'error' : 'offline';
+    if (syncState === 'error') syncTimer = setTimeout(pushNow, 30000);
+  }
+  renderAccountStatus();
+}
+store.onSave(() => {
+  if (!user || syncState === 'choosing') return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushNow, 4000);
+});
+window.addEventListener('online', () => { if (user && syncState === 'offline') pushNow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && syncTimer && user) pushNow(); });
+
+// Load a cloud save into this phone (keeping this phone's own settings).
+function adopt(cloudState) {
+  store.replaceState({ ...cloudState, settings: state().settings }, { quiet: true });
+  setSyncMeta({ uid: user.uid, at: Date.now() });
+  syncState = 'synced';
+  applyTime();
+  refreshAll();
+}
+
+async function reconcile(u) {
+  syncState = 'syncing';
+  renderAccountStatus();
+  let cloud;
+  try { cloud = await account.loadSave(u.uid); } catch { syncState = navigator.onLine ? 'error' : 'offline'; renderAccountStatus(); return; }
+  if (user !== u) return;
+  const local = state();
+  const meta = syncMeta();
+  if (!cloud || !hasProgress(cloud.state)) { await pushNow(); return; }
+  if (!hasProgress(local)) { adopt(cloud.state); toast('PROGRESS LOADED FROM CLOUD'); return; }
+  if (meta.uid === u.uid) {
+    // This phone already belongs to this account: newest save wins.
+    if ((cloud.savedAt || 0) > (local.savedAt || 0)) { adopt(cloud.state); toast('PROGRESS UPDATED FROM CLOUD'); } else await pushNow();
+    return;
+  }
+  chooseSave(local, cloud.state);
+}
+
+function saveSummary(st) {
+  const n = Object.keys(st.caught || {}).filter((k) => BY_KEY[k]).length;
+  return `<b>${n}</b> cards · LV ${game.levelForXP(st.xp || 0)} · ${st.shards || 0}◆`;
+}
+function chooseSave(local, cloud) {
+  syncState = 'choosing';
+  renderAccountStatus();
+  const body = openSheet(`<div class="detail-head"><p class="eyebrow">Cloud save</p><h2 data-decode>Which save?</h2><span class="sci">both have progress</span></div>
+    <p class="fact">This phone and your account have different progress. Pick one to keep — the other will be replaced.</p>
+    <div class="save-pick">
+      <button type="button" class="save-opt" data-keep="cloud"><span class="so-icon">☁️</span><span><b>Cloud save</b><small>${saveSummary(cloud)}</small></span></button>
+      <button type="button" class="save-opt" data-keep="local"><span class="so-icon">📱</span><span><b>This phone</b><small>${saveSummary(local)}</small></span></button>
+    </div>`, { onClose: () => { if (syncState === 'choosing') { syncState = 'idle'; renderAccountStatus(); } } });
+  body.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-keep]');
+    if (!b) return;
+    if (b.dataset.keep === 'cloud') { adopt(cloud); closeSheet(); toast('CLOUD SAVE LOADED'); } else { syncState = 'idle'; closeSheet(); await pushNow(); toast('THIS PHONE\'S PROGRESS SAVED'); }
+  });
+}
+
+// ---- sign-in sheet: sign in / create account / forgot password
+function openAuth(mode = 'signin', note = '', email = '') {
+  const p = account.providerList();
+  const titles = { signin: 'Sign in', signup: 'Create account', reset: 'Reset password' };
+  const social = mode === 'reset' ? '' : `
+    ${p.google ? `<button type="button" class="btn social google" data-social="google">${GOOGLE_G}<span>Continue with Google</span></button>` : ''}
+    ${p.apple ? `<button type="button" class="btn social apple" data-social="apple">${APPLE_LOGO}<span>Continue with Apple</span></button>` : ''}
+    ${p.google || p.apple ? '<div class="or"><span>or</span></div>' : ''}`;
+  const pw = (name, label, auto) => `<label class="fld"><span>${label}</span><span class="pw"><input type="password" name="${name}" autocomplete="${auto}" minlength="8" required><button type="button" class="show" data-show aria-label="Show password">Show</button></span></label>`;
+  const body = openSheet(`<div class="detail-head"><p class="eyebrow">Account</p><h2>${titles[mode]}</h2>
+      <span class="sci">${mode === 'reset' ? 'we\'ll email you a reset link' : 'back up your cards · play on any phone'}</span></div>
+    <div class="auth">
+      ${social}
+      <form class="auth-form" novalidate>
+        ${mode === 'signup' ? `<label class="fld"><span>Callsign</span><input name="name" maxlength="18" autocomplete="nickname" value="${esc(state().name || '')}"></label>` : ''}
+        <label class="fld"><span>Email</span><input type="email" name="email" autocomplete="email" inputmode="email" required value="${esc(email)}"></label>
+        ${mode === 'signin' ? pw('password', 'Password', 'current-password') : ''}
+        ${mode === 'signup' ? pw('password', 'Password · 8+ characters', 'new-password') + pw('confirm', 'Confirm password', 'new-password') : ''}
+        <p class="auth-msg${note ? ' ok' : ''}" role="alert">${esc(note)}</p>
+        <button type="submit" class="btn primary wide">${{ signin: 'Sign in', signup: 'Create account', reset: 'Send reset link' }[mode]}</button>
+      </form>
+      ${mode === 'signin' ? '<p class="auth-links"><button type="button" class="link" data-auth="reset">Forgot password?</button></p>' : ''}
+      <p class="auth-switch">${mode === 'signin' ? 'New here? <button type="button" class="link" data-auth="signup">Create an account</button>'
+        : 'Have an account? <button type="button" class="link" data-auth="signin">Sign in</button>'}</p>
+      <p class="about fine">Your cards sync to your account. Card photos stay on this phone.</p>
+    </div>`);
+  const form = $('.auth-form', body);
+  const msg = $('.auth-msg', body);
+  const busy = (on) => $$('button, input', body).forEach((el) => { if (!el.matches('[data-close]')) el.disabled = on; });
+  const fail = (err) => { msg.className = 'auth-msg'; msg.textContent = typeof err === 'string' ? err : account.friendlyError(err); busy(false); sfx.fail(); };
+  const done = (text) => { closeSheet(); if (text) toast(text); };
+  body.addEventListener('click', async (ev) => {
+    const show = ev.target.closest('[data-show]');
+    if (show) { const input = show.previousElementSibling; input.type = input.type === 'password' ? 'text' : 'password'; show.textContent = input.type === 'password' ? 'Show' : 'Hide'; return; }
+    const soc = ev.target.closest('[data-social]');
+    if (soc) {
+      busy(true);
+      try { const u = await (soc.dataset.social === 'google' ? account.signInGoogle() : account.signInApple()); if (u) done('SIGNED IN'); } catch (err) { fail(err); }
+    }
+  });
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f = new FormData(form);
+    const email = String(f.get('email') || '').trim();
+    const password = String(f.get('password') || '');
+    if (!email) { fail('Enter your email address.'); return; }
+    busy(true);
+    try {
+      if (mode === 'signin') { await account.signIn(email, password); done('SIGNED IN'); }
+      if (mode === 'reset') {
+        await account.resetPassword(email);
+        closeSheet();
+        openAuth('signin', `Reset link sent to ${email}. Check your inbox (and spam).`, email);
+      }
+      if (mode === 'signup') {
+        if (password.length < 8) { fail('Use at least 8 characters for your password.'); return; }
+        if (password !== String(f.get('confirm') || '')) { fail('Passwords don\'t match.'); return; }
+        const name = String(f.get('name') || '').trim();
+        if (name) { state().name = name.slice(0, 18); store.save(); }
+        await account.signUp(email, password, name);
+        done('ACCOUNT CREATED · CHECK YOUR EMAIL');
+      }
+    } catch (err) { fail(err); }
+  });
+  setTimeout(() => (email ? $('input[name=password]', form) : $('input', form))?.focus({ preventScroll: true }), 350);
+}
+
+document.addEventListener('click', async (ev) => {
+  const a = ev.target.closest('[data-auth]');
+  if (a) { sfx.click(); openAuth(a.dataset.auth); return; }
+  const act = ev.target.closest('[data-acct]');
+  if (!act || !user) return;
+  const what = act.dataset.acct;
+  if (what === 'sync') { await pushNow(); toast(syncState === 'synced' ? 'SAVED TO CLOUD' : 'COULDN\'T SAVE — TRY AGAIN'); }
+  if (what === 'verify') { try { await account.resendVerification(); toast('VERIFICATION EMAIL SENT'); } catch (err) { toast(account.friendlyError(err)); } }
+  if (what === 'signout') {
+    if (syncTimer) await pushNow();
+    await account.signOut();
+    toast('SIGNED OUT · PROGRESS KEPT ON THIS PHONE');
+  }
+  if (what === 'delete' && confirm('Delete your account and its cloud save? Your cards stay on this phone. This can\'t be undone.')) {
+    try { await account.deleteAccount(); setSyncMeta({}); toast('ACCOUNT DELETED'); } catch (err) { toast(account.friendlyError(err)); }
+  }
+});
+
+function startAccounts() {
+  if (!account.enabled()) return;
+  account.watch((u) => {
+    user = u;
+    syncState = 'idle';
+    if (u) reconcile(u);
+    if (currentTab === 'id') renderProfile();
+    if (currentTab === 'home') renderHome();
+  }).catch(() => { /* offline or SDK blocked: stay in guest mode */ });
+}
 
 // ---- supply crates & locker (cosmetics only)
 const CRATE_SVG = `<svg viewBox="0 0 120 100" aria-hidden="true">
@@ -1935,6 +2153,7 @@ const ICON = {
   event: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m12 12.5.9 1.9 2.1.3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.4 2.1-.3Z"/></svg>',
   cards: '<svg viewBox="0 0 24 24"><rect x="7" y="3" width="13" height="17" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10"/></svg>',
   scan: '<svg viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><circle cx="12" cy="12" r="3.5"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18Z"/><path d="m9.5 13.5 2 2 3.5-3.5"/></svg>',
 };
 
 function renderHome() {
@@ -1972,6 +2191,7 @@ function renderHome() {
         : { tab: 'id', goto: 'supply', icon: ICON.crate, label: 'Crates', value: 0, sub: `${loot.CRATE_COST}◆ each`, tc: '#F2B51D' })}
       ${tile({ tab: 'ops', icon: ICON.streak, label: 'Streak', value: `${streak}<small>d</small>`, sub: `best ${s.streak?.best || 0}`, hot: streak > 0 && s.streak.last !== game.today(), tc: '#F0A05B', cls: streak > 0 ? 'lit' : '' })}
       ${tile({ tab: 'ops', icon: ICON.event, label: esc(ev.name), value: `${evP}/${ev.goal}`, bar: evP / ev.goal, sub: ev.claimed ? 'Complete ✓' : `${ev.daysLeft}d left`, hot: evP >= ev.goal && !ev.claimed, tc: ev.type ? TYPES[ev.type].color : '#2F9BEA' })}
+      ${account.enabled() && !user && n >= 3 ? tile({ tab: 'id', goto: 'account', icon: ICON.cloud, label: 'Back up', value: 'Sign in', sub: 'Keep your cards safe', tc: '#2F9BEA', bar: null }) : ''}
       ${tile({ tab: 'binder', icon: ICON.cards, label: 'Collection', value: `${n}<small>/${ENTRIES.length}</small>`, bar: n / ENTRIES.length, sub: `${holos} holo · ${sectors} sectors`, tc: '#2BB5A0' })}
     </div>`;
 }
@@ -2218,6 +2438,7 @@ async function boot() {
     } catch { /* permissions API doesn't know "camera" in some browsers */ }
   }
   if (!state().onboarded) showIntro();
+  startAccounts();
   handleCompareLink();
   window.addEventListener('hashchange', handleCompareLink);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

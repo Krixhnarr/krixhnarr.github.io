@@ -27,13 +27,20 @@ try {
 
 export function getState() { return state; }
 
-export function save() {
+// Listeners (cloud sync) hear about every save; `quiet` skips them, e.g.
+// when the save itself came from the cloud.
+const listeners = new Set();
+export function onSave(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
+export function save({ quiet = false } = {}) {
+  state.savedAt = Date.now();
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ }
+  if (!quiet) listeners.forEach((fn) => { try { fn(state); } catch { /* ignore */ } });
 }
 
-export function replaceState(next) {
+export function replaceState(next, opts) {
   state = { ...fresh(), ...next, settings: { ...fresh().settings, ...(next.settings || {}) } };
-  save();
+  save(opts);
 }
 
 // ---- photos (IndexedDB) ----

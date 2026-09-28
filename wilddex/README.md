@@ -64,3 +64,20 @@ Live at https://krixhnarr.github.io/wilddex/ — installable as an app
 
 Plain static files, no build step. When changing app files, bump `VERSION`
 in `sw.js` so installed copies pick up the update.
+
+## Accounts setup (Firebase)
+
+Accounts are optional — without them WildDex runs in guest mode. To switch
+them on (`js/account.js`, `js/firebase-config.js`):
+
+1. Create a project at <https://console.firebase.google.com> (Analytics not needed).
+2. **Authentication → Sign-in method**: enable *Email/Password* and *Google*.
+3. **Authentication → Settings → Authorized domains**: add `krixhnarr.github.io`.
+4. **Firestore Database → Create database** (production mode, a nearby region),
+   then paste `firestore.rules` into the **Rules** tab and publish.
+5. **Project settings → Your apps → Web app**: register it and copy the
+   `firebaseConfig` object into `js/firebase-config.js`; bump `VERSION` in `sw.js`.
+
+The config values are public by design; the security rules only let each
+player read and write their own save (`players/{uid}`). Card photos stay on
+the phone. See `ROADMAP.md` for what's next.
