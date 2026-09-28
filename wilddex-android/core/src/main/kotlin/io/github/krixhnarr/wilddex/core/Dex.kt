@@ -30,7 +30,7 @@ private data class DexFile(val animalClassLimit: Int, val rarity: List<Rarity>, 
 @Serializable
 private data class TypesFile(val types: List<AffinityType>, val affinity: Map<String, List<String>>)
 
-internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
+internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false; coerceInputValues = true; isLenient = true }
 
 private fun resource(name: String): String =
     Dex::class.java.getResourceAsStream("/$name")?.bufferedReader()?.use { it.readText() }

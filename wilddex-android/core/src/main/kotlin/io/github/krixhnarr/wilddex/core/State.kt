@@ -1,6 +1,12 @@
 package io.github.krixhnarr.wilddex.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 // The player's saved progress. Field names match the web app's save format so
 // a web backup or cloud save can be loaded as-is.
@@ -117,4 +123,32 @@ data class PlayerState(
     companion object {
         fun fromJson(text: String): PlayerState = json.decodeFromString(serializer(), text).also { it.migrate() }
     }
+}
+
+/**
+ * A backup file, in the same format as the web version's export:
+ * `{ app: "wilddex", version: 1, exported, state, photos: { key: dataURL } }`.
+ * A bare save (just the state object) is accepted too.
+ */
+object Backup {
+    class Parsed(val state: PlayerState, val photos: Map<String, String>)
+
+    fun parse(text: String): Parsed {
+        val root = json.parseToJsonElement(text).jsonObject
+        if (root["app"]?.jsonPrimitive?.contentOrNull == "wilddex" && root["state"] != null) {
+            val photos = root["photos"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap()
+            return Parsed(json.decodeFromJsonElement(PlayerState.serializer(), root.getValue("state")).also { it.migrate() }, photos)
+        }
+        require(root.containsKey("caught")) { "Not a WildDex backup file" }
+        return Parsed(PlayerState.fromJson(text), emptyMap())
+    }
+
+    fun write(state: PlayerState, photos: Map<String, String>, exported: Long): String = json.encodeToString(
+        JsonObject.serializer(),
+        buildJsonObject {
+            put("app", "wilddex"); put("version", 1); put("exported", exported)
+            put("state", json.encodeToJsonElement(PlayerState.serializer(), state))
+            put("photos", buildJsonObject { photos.forEach { (k, v) -> put(k, v) } })
+        },
+    )
 }

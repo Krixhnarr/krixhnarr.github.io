@@ -16,7 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.lifecycleScope
 import io.github.krixhnarr.wilddex.audio.GameFx
 import io.github.krixhnarr.wilddex.core.Game
-import io.github.krixhnarr.wilddex.core.PlayerState
+import io.github.krixhnarr.wilddex.core.Backup
 import io.github.krixhnarr.wilddex.data.SaveStore
 import io.github.krixhnarr.wilddex.ui.WildDexRoot
 import kotlinx.coroutines.delay
@@ -25,10 +25,13 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private lateinit var model: GameModel
     private lateinit var fx: GameFx
+    private lateinit var store: SaveStore
 
     private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@registerForActivityResult
-        contentResolver.openOutputStream(uri)?.use { it.write(model.state.toJson().toByteArray()) }
+        val st = model.state
+        val text = Backup.write(st, store.photosAsDataUrls(st.ownedKeys()), System.currentTimeMillis())
+        contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
         model.say("BACKUP SAVED")
     }
 
@@ -36,7 +39,9 @@ class MainActivity : ComponentActivity() {
         uri ?: return@registerForActivityResult
         try {
             val text = contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: return@registerForActivityResult
-            model.replace(PlayerState.fromJson(text))
+            val b = Backup.parse(text)
+            store.restorePhotos(b.photos)
+            model.replace(b.state)
             model.say("BINDER RESTORED")
         } catch (e: Exception) {
             model.say("THAT FILE ISN'T A WILDDEX BACKUP")
@@ -73,7 +78,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        model = GameModel(SaveStore(applicationContext))
+        store = SaveStore(applicationContext)
+        model = GameModel(store)
         fx = GameFx(applicationContext) { model.state.settings }
         model.fx = fx
         model.exportBackup = { exportLauncher.launch("wilddex-backup-${Game.today()}.json") }
