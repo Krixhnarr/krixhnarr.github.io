@@ -20,44 +20,49 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-// On-device recognition with MobileNet v2 (ImageNet, 1001 outputs including
-// "background" at 0), plus the image helpers the scanner needs.
+// On-device recognition with EfficientNet-Lite4 (ImageNet, 1000 classes,
+// int8, 300×300, 81.5% top-1), plus the image helpers the scanner needs.
 
 class Classifier private constructor(context: Context) {
     private val interpreter: Interpreter
+    private val inScale: Float
+    private val inZero: Int
+    private val outScale: Float
+    private val outZero: Int
 
     init {
-        val fd = context.assets.openFd("mobilenet_v2.tflite")
+        val fd = context.assets.openFd(MODEL)
         val buf = FileInputStream(fd.fileDescriptor).channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
         interpreter = Interpreter(buf, Interpreter.Options().setNumThreads(4))
+        interpreter.getInputTensor(0).quantizationParams().let { inScale = it.scale; inZero = it.zeroPoint }
+        interpreter.getOutputTensor(0).quantizationParams().let { outScale = it.scale; outZero = it.zeroPoint }
     }
 
-    private val input = ByteBuffer.allocateDirect(4 * SIZE * SIZE * 3).order(ByteOrder.nativeOrder())
-    private val output = Array(1) { FloatArray(1001) }
+    private val input = ByteBuffer.allocateDirect(SIZE * SIZE * 3).order(ByteOrder.nativeOrder())
+    private val output = Array(1) { ByteArray(1000) }
     private val pixels = IntArray(SIZE * SIZE)
+    /** Pixel value 0..255 → the model's quantised input, for EfficientNet's (x − 127) / 128 normalisation. */
+    private val lut = ByteArray(256) { v -> (((v - 127) / 128f) / inScale + inZero).roundToInt().coerceIn(0, 255).toByte() }
 
-    /** Probabilities for the 1000 ImageNet classes, for one 224×224 bitmap. */
+    /** Probabilities for the 1000 ImageNet classes, for one [SIZE]×[SIZE] bitmap. */
     @Synchronized
     private fun run(bmp: Bitmap): FloatArray {
         bmp.getPixels(pixels, 0, SIZE, 0, 0, SIZE, SIZE)
         input.rewind()
         for (p in pixels) {
-            input.putFloat(((p shr 16) and 255) / 127.5f - 1f)
-            input.putFloat(((p shr 8) and 255) / 127.5f - 1f)
-            input.putFloat((p and 255) / 127.5f - 1f)
+            input.put(lut[(p shr 16) and 255]); input.put(lut[(p shr 8) and 255]); input.put(lut[p and 255])
         }
         interpreter.run(input, output)
-        // drop "background" and renormalise: the same as a softmax over logits 1..1000
         val out = FloatArray(1000)
         var sum = 0.0
-        for (i in 0 until 1000) { out[i] = output[0][i + 1]; sum += out[i] }
+        for (i in 0 until 1000) { out[i] = ((output[0][i].toInt() and 255) - outZero) * outScale; sum += out[i] }
         if (sum > 0) for (i in 0 until 1000) out[i] = (out[i] / sum).toFloat()
         return out
     }
 
     /**
      * Averages the full square, its mirror image and a tighter centre crop
-     * (helps with small or off-centre animals), like the web version.
+     * (helps with small or off-centre animals).
      */
     fun classify(square: Bitmap): FloatArray {
         val full = Bitmap.createScaledBitmap(square, SIZE, SIZE, true)
@@ -69,8 +74,12 @@ class Classifier private constructor(context: Context) {
         return FloatArray(1000) { i -> (views[0][i] + views[1][i] + views[2][i]) / 3f }
     }
 
+    /** One quick look (no extra views) — used for the whole-frame screen/print check. */
+    fun classifyOnce(square: Bitmap): FloatArray = run(Bitmap.createScaledBitmap(square, SIZE, SIZE, true))
+
     companion object {
-        const val SIZE = 224
+        const val MODEL = "efficientnet_lite4_int8.tflite"
+        const val SIZE = 300
         @Volatile private var instance: Classifier? = null
         fun get(context: Context): Classifier = instance ?: synchronized(this) {
             instance ?: Classifier(context.applicationContext).also { instance = it }
@@ -80,7 +89,7 @@ class Classifier private constructor(context: Context) {
 
 object Frames {
     /** The centre square of the camera frame (what the round viewfinder shows), scaled to [size]. */
-    fun centerSquare(src: Bitmap, size: Int = 448): Bitmap {
+    fun centerSquare(src: Bitmap, size: Int = 480): Bitmap {
         val side = min(src.width, src.height)
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         Canvas(out).drawBitmap(
@@ -91,7 +100,7 @@ object Frames {
     }
 
     /** The whole camera frame letterboxed on black — used only for the screen/print check. */
-    fun letterbox(src: Bitmap, size: Int = 448): Bitmap {
+    fun letterbox(src: Bitmap, size: Int = 480): Bitmap {
         val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(out)
         c.drawColor(Color.BLACK)

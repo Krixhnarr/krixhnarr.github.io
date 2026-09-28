@@ -8,7 +8,7 @@ Everything that's done, in progress, and still to do. ✅ done · 🔧 in progre
   pure-Kotlin `core` module (ready to share with an iPhone app via Kotlin Multiplatform)
 - ✅ Parity tests: the Kotlin rules give the same results as the old JavaScript
 - ✅ Home, Cards, card detail, Scan, Arena, Ops, Operator screens; day/night sky
-- ✅ Scanning: CameraX + on-device MobileNet (LiteRT) + depth sweep, screen/print
+- ✅ Scanning: CameraX + on-device recogniser (LiteRT) + depth sweep, screen/print
   and bezel checks; reveal, sync grades, holo, manual pick, rollback
 - ✅ Battles, crates, generated music & sound effects, vibration, narrator voice,
   card tilt, optional location tags, backup export/import
@@ -55,10 +55,13 @@ Everything that's done, in progress, and still to do. ✅ done · 🔧 in progre
 - ⬜ Battery and heat during long scanning sessions
 
 ## 3. Recognition quality
+- ✅ EfficientNet-Lite4 replaces MobileNet v2 (93% vs 87% top-1 card accuracy on
+  independent wildlife photos); two looks per scan must agree; no manual pick list
+- ⬜ Measure accept/reject rates on real scans and tune `MATCH_TOP` / `MATCH_MARGIN`
 - ⬜ Animals the model can't see yet: pigeons, crows, deer, giraffes, many
   Indian species → move to a wildlife-trained model (e.g. iNaturalist-based)
 - ⬜ Regional sets (Kerala / India: Malabar squirrel, hornbill, peacock varieties…)
-- ⬜ Smaller/faster model (quantised int8) — the APK is ~24 MB, 14 MB of it the model
+- ✅ Quantised int8 model (15 MB)
 
 ## 4. Game features
 - ⬜ Friends list and async PvP (battle a friend's squad from their code)

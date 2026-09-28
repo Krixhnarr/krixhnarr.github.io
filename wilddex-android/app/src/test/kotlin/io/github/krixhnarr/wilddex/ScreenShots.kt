@@ -64,15 +64,11 @@ class ScreenShots {
     @Test fun scan() = shot("scan") { tab = Tab.Scan }
     @Test fun revealNew() = shot("reveal-new") {
         pending = GameModel.PendingScan(io.github.krixhnarr.wilddex.core.Game.Grade("A", 0.75, 8, 10, "Good"), null)
-        register(io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("tiger"), io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("tiger").c[0], emptyList())
+        register(io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("tiger"), io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("tiger").c[0])
     }
     @Test fun revealRescan() = shot("reveal-rescan") {
         pending = GameModel.PendingScan(io.github.krixhnarr.wilddex.core.Game.Grade("S", 0.9, 15, 20, "Perfect"), null)
-        register(io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("koala"), io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("koala").c[0], emptyList())
-    }
-    @Test fun choices() = shot("choices") {
-        val d = io.github.krixhnarr.wilddex.core.Dex.byKey
-        open(Sheet.Choices(listOf("grey-wolf", "dog", "red-fox").mapNotNull { d[it] }.mapIndexed { i, e -> io.github.krixhnarr.wilddex.core.Recognition.Candidate(e, 0.3 - i * 0.08, e.c[0]) }, "Signal inconclusive — pick the right animal, or rescan closer and in better light."))
+        register(io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("koala"), io.github.krixhnarr.wilddex.core.Dex.byKey.getValue("koala").c[0])
     }
     @Test fun arena() = shot("arena") { tab = Tab.Arena }
     @Test fun fight() = shot("fight") { open(Sheet.Fight("rival")) }
