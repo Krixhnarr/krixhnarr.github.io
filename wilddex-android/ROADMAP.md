@@ -42,8 +42,12 @@ Everything that's done, in progress, and still to do. ✅ done · 🔧 in progre
 - ⬜ Firebase App Check to block scripted abuse of the backend
 
 ## 2. Real-device testing & tuning
-- ⬜ Tune the anti-cheat liveness thresholds on real phones (photos, prints,
-  screens, videos vs. real pets, birds, bugs)
+- ✅ Point-and-hold scanning (no left-right sweep) so big and far animals work;
+  screen pixel-grid/moiré detector added; depth from hand wobble is a grade bonus
+- ⬜ Tune the live-check thresholds on real phones: screens (phones, laptops,
+  TVs at different distances), printed photos, vs. real pets, birds, bugs.
+  Watch for false alarms on patterned fabric, blinds and tiles
+- ⬜ Stronger print detection (paper texture, halftone dots, glare)
 - ⬜ Check camera permissions, torch, front/back lens, gyro tilt, geolocation
 - ⬜ Performance on low-end phones (scan time, battery during long sessions)
 - ⬜ Music balance and loudness on phone speakers; haptics on Android

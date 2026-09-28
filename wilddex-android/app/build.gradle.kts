@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.krixhnarr.wilddex"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 4
+        versionName = "0.2.0"
     }
 
     // A shared debug key kept in the repo, so every build installs as an update
