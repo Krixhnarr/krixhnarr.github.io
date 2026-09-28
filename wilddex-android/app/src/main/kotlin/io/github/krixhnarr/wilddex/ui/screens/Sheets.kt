@@ -79,7 +79,6 @@ fun SheetContent(model: GameModel, sheet: Sheet) {
         Sheet.Intro -> IntroSheet(model)
         is Sheet.Crate -> CrateSheet(model, sheet.free)
         is Sheet.Reveal -> RevealSheet(model, sheet)
-        is Sheet.Choices -> ChoicesSheet(model, sheet.options, sheet.text)
         is Sheet.Squad -> SquadSheet(model, sheet.slot)
         is Sheet.Fight -> FightSheet(model, sheet)
     }
@@ -330,9 +329,9 @@ private val HELP = mapOf(
         "No animals" to "No animals inside — those you scan for real.",
     )),
     "about" to ("About WildDex" to listOf(
-        "Private" to "Recognition runs on your phone (MobileNet v2). Photos never leave your device, and scanning works offline.",
+        "Private" to "Recognition runs on your phone (EfficientNet-Lite4). Photos never leave your device, and scanning works offline.",
         "Dex" to "${Dex.total} cards · ${Dex.sets.size} sectors · ${Dex.typeIds.size} types.",
-        "Credits" to "3D animal art: Microsoft Fluent Emoji (MIT). Fonts: Russo One, JetBrains Mono (OFL).",
+        "Credits" to "3D animal art: Microsoft Fluent Emoji (MIT). Recogniser: EfficientNet-Lite4 (Apache 2.0). Fonts: Russo One, JetBrains Mono (OFL).",
     )),
 )
 

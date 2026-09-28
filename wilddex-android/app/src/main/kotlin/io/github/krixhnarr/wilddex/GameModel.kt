@@ -15,7 +15,6 @@ import io.github.krixhnarr.wilddex.core.Progress
 import io.github.krixhnarr.wilddex.core.LevelUp
 import io.github.krixhnarr.wilddex.core.Loot
 import io.github.krixhnarr.wilddex.core.PlayerState
-import io.github.krixhnarr.wilddex.core.Recognition
 import io.github.krixhnarr.wilddex.data.SaveStore
 
 enum class Tab { Home, Cards, Scan, Arena, Ops, Id }
@@ -23,8 +22,7 @@ enum class Tab { Home, Cards, Scan, Arena, Ops, Id }
 /** Things that slide up over the current screen. */
 sealed interface Sheet {
     data class Card(val key: String) : Sheet
-    data class Reveal(val result: CaptureResult, val alternatives: List<Recognition.Candidate>, val snapshot: PlayerState) : Sheet
-    data class Choices(val options: List<Recognition.Candidate>, val text: String) : Sheet
+    data class Reveal(val result: CaptureResult, val snapshot: PlayerState) : Sheet
     data class Squad(val slot: Int) : Sheet
     data class Fight(val kind: String, val nonce: Long = System.nanoTime()) : Sheet
     data class Crate(val free: Boolean, val nonce: Long = System.nanoTime()) : Sheet
@@ -151,7 +149,7 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
     var enableLocation: (() -> Unit)? = null
 
     /** Registers a verified capture and opens the reveal. */
-    fun register(e: Entry, form: Int, alternatives: List<Recognition.Candidate>) {
+    fun register(e: Entry, form: Int) {
         val p = pending
         pending = null
         val snapshot = state.copyDeep()
@@ -162,18 +160,18 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
         commit()
         queueLevelUps(r.levelUps)
         fx.buzz(*(if (!r.isNew) longArrayOf(30) else when (e.r) { 4 -> longArrayOf(40, 60, 40, 60, 200); 3 -> longArrayOf(30, 40, 30, 40, 120); else -> longArrayOf(30, 40, 80) }))
-        open(Sheet.Reveal(r, alternatives.filter { it.entry != e }, snapshot))
+        open(Sheet.Reveal(r, snapshot))
     }
 
-    /** "Misidentified?" — undo everything a registration did, then offer the other candidates. */
+    /** "Wrong animal?" — undo everything the registration did. The player scans again; there is no pick list. */
     fun rollback(r: Sheet.Reveal) {
         val e = r.result.entry
         replace(r.snapshot)
         levelUps.clear()
         if (r.result.isNew) { store?.deletePhoto(e.k); fresh.remove(e.k) }
         fx.stopSpeaking()
-        if (r.alternatives.isNotEmpty()) open(Sheet.Choices(r.alternatives, "Rolled back ${e.n}. Was it one of these?"))
-        else { close(); say("REGISTRATION ROLLED BACK") }
+        close()
+        say("${e.n.uppercase()} UNDONE · SCAN AGAIN")
     }
 
     fun go(t: Tab) { if (t != tab) fx.click(); tab = t }

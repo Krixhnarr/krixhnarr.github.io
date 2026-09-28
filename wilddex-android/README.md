@@ -29,7 +29,7 @@ Scanning is point-and-hold: the player holds the phone on the animal for
 ~1.5 s, so it works for pets and for a zoo elephant 20 m away. Before a card
 is registered the scan must pass the live check:
 
-- **Devices & print:** MobileNet v2 looks for screens, monitors, phones,
+- **Devices & print:** the recogniser looks for screens, monitors, phones,
   books and packets, both in the aimed square and in the whole frame.
 - **Bezels & borders:** `FrameDetect.kt` looks for a device bezel or a
   paper margin around the picture.
@@ -45,8 +45,23 @@ carefully made print or a screen seen from far away can sometimes pass;
 tune the thresholds with real-phone reports (the scanner log prints the
 numbers behind every decision).
 
-Recognition runs on the phone (`app/src/main/assets/mobilenet_v2.tflite`,
-full + mirrored + centre-crop views averaged). Nothing is uploaded.
+## Recognition — no second opinions
+
+Recognition runs on the phone with EfficientNet-Lite4 (int8, 300×300,
+`app/src/main/assets/efficientnet_lite4_int8.tflite`). Each scan looks twice —
+the middle and the end of the hold, each as full + mirrored + centre-crop
+views — and averages them. A card is only registered when it is clearly one
+animal (`Recognition.decide`): score ≥ 0.6, ≥ 0.4 ahead of the next card, and
+both looks agree. Otherwise the player is told to get closer or try another
+angle; there is no "pick the animal" list, so nobody can choose their way to
+a card. Classes under 1% don't count towards a card, so 118 dog breeds can't
+out-vote a single horse class.
+
+On 756 independent wildlife photos (lucabaggi/animal-wildlife, 63 kinds with a
+matching card), single-look top-1 card accuracy was 93.4% vs 87.4% for the
+previous MobileNet v2; with the acceptance rule, 84% of photos were accepted
+and 2.3% of those were wrong (before the two-look agreement check).
+Nothing is uploaded.
 
 ## Build
 
@@ -76,4 +91,4 @@ Backups exported from the app use the same format.
 ## Credits
 
 3D animal art: Microsoft Fluent Emoji (MIT, `app/src/main/assets/art/LICENSE.md`).
-Fonts: Russo One, JetBrains Mono (OFL). Model: MobileNet v2 (Apache 2.0).
+Fonts: Russo One, JetBrains Mono (OFL). Model: EfficientNet-Lite4 (Apache 2.0).

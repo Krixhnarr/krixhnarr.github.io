@@ -13,7 +13,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import io.github.krixhnarr.wilddex.GameModel
-import io.github.krixhnarr.wilddex.Sheet
 import io.github.krixhnarr.wilddex.core.Dex
 import io.github.krixhnarr.wilddex.core.FrameDetect
 import io.github.krixhnarr.wilddex.core.Game
@@ -157,14 +156,16 @@ class ScanController(private val model: GameModel, private val context: Context)
             fx.scan()
             val started = System.currentTimeMillis()
             if (!modelReady) warm()
-            say("[..] inference ×3 (full · mirror · crop)")
+            say("[..] recognising · 2 frames × 3 views")
             val outcome = withContext(Dispatchers.Default) {
                 val classifier = Classifier.get(context)
+                // look twice: the middle and the end of the hold must agree on the animal
                 val probs = classifier.classify(square)
-                val v = Recognition.interpret(probs)
+                val looks = listOfNotNull(probs, midShot?.let { classifier.classify(Frames.centerSquare(it)) })
+                val v = Recognition.decide(looks)
                 if (v.kind == Recognition.Kind.MATCH || v.kind == Recognition.Kind.UNSURE) {
                     // 3) only a real animal counts: look for screens and prints
-                    val spoof = Recognition.spoofCheck(probs, classifier.classify(Frames.letterbox(shot)))
+                    val spoof = Recognition.spoofCheck(probs, classifier.classifyOnce(Frames.letterbox(shot)))
                     val frame = Frames.detectFrame(shot)
                     val grid = listOfNotNull(shot, midShot).map { ScreenDetect.detect(Frames.screenCrop(it)) }.maxBy { it.ratio }
                     // depth from the hand's natural wobble is a bonus, not a requirement
@@ -211,13 +212,22 @@ class ScanController(private val model: GameModel, private val context: Context)
                 model.pending = GameModel.PendingScan(o.grade, Bitmap.createScaledBitmap(square, 360, 360, true))
                 val d = o.depth
                 say("live ✓ · steady ${(o.steady * 100).toInt()}% · depth ${if (d.verdict == Verdict.LIVE) "seen (${d.parallax} pts)" else "not seen"}", Kind.Ok)
+                val alt = v.alternatives.drop(1).firstOrNull()
+                val second = alt?.let { " · next ${snake(it.entry.n)} ${conf(it.score)}" } ?: ""
                 if (v.kind == Recognition.Kind.MATCH) {
-                    say("match ${snake(v.top.entry.s)} · conf=${conf(v.top.score)}", Kind.Ok)
-                    model.register(v.top.entry, v.top.form, v.alternatives)
+                    say("match ${snake(v.top.entry.s)} · conf=${conf(v.top.score)}$second", Kind.Ok)
+                    model.register(v.top.entry, v.top.form)
                 } else {
+                    // no guessing and no pick list: the player simply scans again
+                    model.pending = null
                     fx.again()
-                    say("low confidence · top=${conf(v.top.score)} · manual id", Kind.Warn)
-                    model.open(Sheet.Choices(v.alternatives, "Signal inconclusive — pick the right animal, or rescan closer and in better light."))
+                    say(
+                        if (!v.agree) "not sure · the two looks disagreed (${snake(v.top.entry.n)}$second)"
+                        else "not sure · ${snake(v.top.entry.n)} ${conf(v.top.score)}$second",
+                        Kind.Warn,
+                    )
+                    model.say("NOT SURE WHICH ANIMAL · GET CLOSER OR TRY ANOTHER ANGLE")
+                    delay(1400)
                 }
                 frozen = null
                 idle()

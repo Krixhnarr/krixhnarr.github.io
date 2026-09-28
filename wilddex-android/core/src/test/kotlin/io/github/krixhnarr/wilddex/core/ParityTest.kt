@@ -106,30 +106,6 @@ class ParityTest {
         assertEquals(arr("todayMissions").map { it.jsonPrimitive.content }, Game.missions().map { it.id })
     }
 
-    @Test fun recognition() {
-        var seed = 7L
-        fun rnd(): Double { seed = ((seed.toInt() * 1664525 + 1013904223).toLong() and 0xFFFFFFFFL); return seed / 4294967296.0 }
-        for ((t, row) in arr("interpret").withIndex()) {
-            val js = row.jsonObject
-            val prob = FloatArray(1000)
-            var sum = 0.0
-            val hot = floor(rnd() * 1000).toInt()
-            for (i in 0 until 1000) { val r = rnd(); prob[i] = (r * r * r * r * r * r * r * r).toFloat(); sum += prob[i] }
-            prob[hot] = (prob[hot] + sum * (t % 3)).toFloat()
-            var s2 = 0.0
-            for (i in 0 until 1000) s2 += prob[i]
-            for (i in 0 until 1000) prob[i] = (prob[i] / s2).toFloat()
-            assertEquals(js["hot"]!!.jsonPrimitive.int, hot)
-            val v = Recognition.interpret(prob)
-            assertEquals("case $t kind", js["kind"]!!.jsonPrimitive.content, v.kind.name.lowercase())
-            assertEquals("case $t top", js["top"]!!.jsonPrimitive.content, v.top.entry.k)
-            assertEquals(js["score"]!!.jsonPrimitive.double, v.top.score, 1e-9)
-            assertEquals(js["form"]!!.jsonPrimitive.int, v.top.form)
-            assertEquals(js["alts"]!!.jsonArray.map { it.jsonPrimitive.content }, v.alternatives.map { it.entry.k })
-            assertEquals(js["object"]!!.jsonPrimitive.int, v.obj)
-        }
-    }
-
     // --- synthetic sweeps, generated exactly like parity.mjs
     private fun lattice(ix: Int, iy: Int, salt: Int): Double {
         var h = ix * 374761393 + iy * 668265263 + salt * 1274126177

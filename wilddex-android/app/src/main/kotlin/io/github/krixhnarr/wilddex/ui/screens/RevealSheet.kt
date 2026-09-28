@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.sp
 import io.github.krixhnarr.wilddex.GameModel
 import io.github.krixhnarr.wilddex.Sheet
 import io.github.krixhnarr.wilddex.core.Game
-import io.github.krixhnarr.wilddex.core.Recognition
 import io.github.krixhnarr.wilddex.live
 import io.github.krixhnarr.wilddex.ui.AnimalArt
 import io.github.krixhnarr.wilddex.ui.Btn
@@ -225,7 +224,7 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
                 ChunkyButton("Continue", kind = Btn.Primary) { model.close() }
             }
             Text(
-                "misidentified? not a ${e.n.lowercase()}",
+                "wrong animal? not a ${e.n.lowercase()} · undo",
                 style = mono(11.sp, c.dim).copy(textDecoration = TextDecoration.Underline),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable { model.rollback(sheet) }.padding(8.dp),
@@ -282,33 +281,4 @@ fun CardBack(modifier: Modifier, glow: Float = 1f) {
             Text("TAP TO DECRYPT", style = mono(9.sp, Color(0xFFFFE08A), FontWeight.Bold, 0.2f))
         }
     }
-}
-
-@Composable
-fun ChoicesSheet(model: GameModel, options: List<Recognition.Candidate>, text: String) {
-    val c = LocalWd.current
-    val s = model.live
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Chip("⚠ Signal unclear", highlight = false)
-    }
-    SheetHead("Manual identification", "Select match")
-    Text(text, style = mono(12.sp, c.ink), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (o in options) {
-            val known = s.caught.containsKey(o.entry.k)
-            Raised(Modifier.fillMaxWidth(), onClick = { model.fx.click(); model.register(o.entry, o.form, options.filter { it != o }) }) {
-                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(52.dp).clip(CircleShape).background(typeColor(o.entry).copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                        AnimalArt(o.entry, Modifier.size(38.dp))
-                    }
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(o.entry.n, style = display(16.sp, c.hi))
-                        Text(if (known) "in your binder" else "new card", style = mono(11.sp, if (known) c.dim else c.good, FontWeight.Bold))
-                    }
-                    Text("${maxOf(1, (o.score * 100).toInt())}%", style = display(16.sp, c.accentDeep))
-                }
-            }
-        }
-    }
-    Actions { ChunkyButton("None of these · rescan") { model.pending = null; model.close() } }
 }
