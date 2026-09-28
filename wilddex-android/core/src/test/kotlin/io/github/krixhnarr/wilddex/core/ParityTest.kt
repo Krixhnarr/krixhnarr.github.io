@@ -152,6 +152,7 @@ class ParityTest {
      */
     private fun sweep(
         kind: String, amp: Double = 24.0, exposure: Double = 0.0, repeat: Boolean = false, n: Int = 20,
+        depth: Double = 2.2, breathe: Double = 0.0, lens: Double = 0.0,
     ): List<GrayFrame> = (0 until n).map { i ->
         val f = if (repeat) i / 2 * 2 else i // every frame shown twice, like a laggy camera
         val phase = if (f < n / 2) f / (n / 2 - 1.0) else (n - 1 - f) / (n / 2 - 1.0)
@@ -161,14 +162,19 @@ class ParityTest {
         val gain = 1 + exposure * kotlin.math.sin(f * 0.7)
         val offset = exposure * 60 * kotlin.math.cos(f * 0.4)
         val g = FloatArray(w * h)
-        for (y in 0 until h) for (x in 0 until w) {
+        for (y0 in 0 until h) for (x0 in 0 until w) {
+            // barrel lens distortion: straight lines bow, so even a flat picture doesn't move by one homography
+            val rx = (x0 - 128) / 160.0; val ry = (y0 - 96) / 160.0
+            val kd = 1 + lens * (rx * rx + ry * ry)
+            val x = (128 + (x0 - 128) * kd).toInt(); val y = (96 + (y0 - 96) * kd).toInt()
             val inFg = ((x - 128) * (x - 128)).toDouble() / 3600 + ((y - 96) * (y - 96)).toDouble() / 2500 < 1
             val v = when {
-                kind == "live" && inFg -> noise(x + cam * 2.2 + 1000, y.toDouble(), 5, 2)
+                // a live animal: shifts `depth`× as far as the background, and moves a little by itself
+                kind == "live" && inFg -> noise(x + cam * depth + 1000 + breathe * kotlin.math.sin(f * 1.1), y + breathe * kotlin.math.cos(f * 0.8), 5, 2)
                 kind == "video" && inFg -> noise(x + cam + 1000, y + 14 * kotlin.math.sin(f * 1.3), 5, 2)
                 else -> noise(x + cam, y.toDouble(), 6, 1)
             }
-            g[y * w + x] = (v * gain + offset).coerceIn(0.0, 255.0).toFloat()
+            g[y0 * w + x0] = (v * gain + offset).coerceIn(0.0, 255.0).toFloat()
         }
         GrayFrame(g, w, h)
     }
@@ -202,15 +208,29 @@ class ParityTest {
         check(Verdict.LIVE, sweep("live", amp = 32.0, exposure = 0.2, repeat = true), "live + all three")
     }
 
+    /** A real animal close to its background, breathing or shifting a little while you scan. */
+    @Test fun liveAnimalThatMoves() {
+        check(Verdict.LIVE, sweep("live", breathe = 3.0), "live + breathing")
+        check(Verdict.LIVE, sweep("live", depth = 1.3, breathe = 2.0), "shallow depth + breathing")
+        check(Verdict.LIVE, sweep("live", depth = 1.3, breathe = 3.0), "shallow depth + moving")
+        // an animal moving a lot, close to its background: a wider sideways slide gets it through
+        check(Verdict.LIVE, sweep("live", depth = 1.3, breathe = 4.0, amp = 40.0), "shallow depth + moving a lot + wide slide")
+        check(Verdict.LIVE, sweep("live", depth = 1.2, breathe = 3.0, amp = 40.0), "very shallow depth + moving + wide slide")
+        check(Verdict.LIVE, sweep("live", depth = 1.3, breathe = 3.0, exposure = 0.2, lens = 0.06), "shallow + moving + exposure + lens")
+    }
+
     /** The same conditions must not let a picture through. */
     @Test fun picturesStillRejected() {
         check(Verdict.FLAT, sweep("flat", exposure = 0.25), "flat + exposure drift")
         check(Verdict.FLAT, sweep("flat", amp = 48.0), "flat + fast slide")
         check(Verdict.FLAT, sweep("flat", amp = 40.0, exposure = 0.2, repeat = true), "flat + all three")
+        check(Verdict.FLAT, sweep("flat", lens = 0.06), "flat + lens distortion")
+        check(Verdict.FLAT, sweep("flat", amp = 48.0, lens = 0.1), "flat + strong lens distortion + fast")
         // a video on a screen is rejected either as a video or as a flat picture
         val rejected = setOf(Verdict.VIDEO, Verdict.FLAT)
         checkAny(rejected, sweep("video"), "video on a screen")
         checkAny(rejected, sweep("video", exposure = 0.2), "video + exposure drift")
         checkAny(rejected, sweep("video", amp = 40.0, repeat = true), "video + fast + repeated")
+        checkAny(rejected, sweep("video", lens = 0.06), "video + lens distortion")
     }
 }

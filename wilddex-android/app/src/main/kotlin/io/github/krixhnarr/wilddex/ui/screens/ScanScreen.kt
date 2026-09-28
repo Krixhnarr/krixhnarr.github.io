@@ -299,13 +299,17 @@ private fun Hud(ctl: ScanController) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val left = ctl.progress < 0.5f
                 Text(
-                    if (left) "◀◀◀  Slide phone left" else "Now slide right  ▶▶▶",
+                    if (left) "◀◀◀  Move phone left" else "Now move right  ▶▶▶",
                     style = display(15.sp, Color.White),
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 6.dp),
                 )
                 Box(Modifier.padding(top = 8.dp).width(180.dp).height(6.dp).clip(CircleShape).background(Color(0x55FFFFFF))) {
                     Box(Modifier.fillMaxWidth(ctl.progress).height(6.dp).background(Color(0xFFFFC83D)))
                 }
+                Text(
+                    "slide it sideways · don't turn it", style = mono(11.sp, Color.White, FontWeight.Bold),
+                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0x66000000)).padding(horizontal = 8.dp, vertical = 2.dp),
+                )
             }
         }
     }

@@ -58,7 +58,7 @@ class ScanController(private val model: GameModel, private val context: Context)
         while (log.size > 6) log.removeAt(0)
     }
 
-    fun idle() = say("Ready · point at a real animal")
+    fun idle() = say("Ready · point at a real animal, then move the phone sideways")
 
     /** Called from the camera analyzer thread for every frame. */
     fun onFrame(img: ImageProxy) {
@@ -119,7 +119,7 @@ class ScanController(private val model: GameModel, private val context: Context)
         fx.duck(true)
         try {
             say("> wilddex.scan --live", Kind.Cmd)
-            say("[..] lock-on sweep · slide phone left, then right")
+            say("[..] lock-on sweep · move the phone sideways: left, then right")
             // 1) record ~1.9 s while the player slides the phone
             val frames = ArrayList<GrayFrame>(SWEEP_FRAMES)
             var quarter = 0
@@ -217,9 +217,19 @@ class ScanController(private val model: GameModel, private val context: Context)
             is Outcome.Depth -> {
                 val d = o.depth
                 when (d.verdict) {
-                    Verdict.FLAT -> { fx.fail(); say("liveness failed · flat surface · ${d.parallax}/${d.tracks} depth points", Kind.Err); say("photos, prints & screens can't be registered", Kind.Err); model.say("FLAT IMAGE DETECTED · SCAN A LIVE ANIMAL") }
-                    Verdict.VIDEO -> { fx.fail(); say("liveness failed · moving image on a flat screen · ${d.indep} pts", Kind.Err); say("videos on screens can't be registered", Kind.Err); model.say("VIDEO ON A SCREEN DETECTED · SCAN A LIVE ANIMAL") }
-                    Verdict.STILL -> { fx.again(); say("no depth signal · slide the phone left, then right, while scanning", Kind.Warn); model.say("SLIDE YOUR PHONE LEFT, THEN RIGHT") }
+                    Verdict.FLAT -> {
+                        fx.fail()
+                        say("no depth seen · looks flat · ${d.parallax}/${d.tracks} depth points", Kind.Err)
+                        say("photos, prints & screens can't be registered · real animals: move the phone sideways, don't turn it", Kind.Warn)
+                        model.say("NO 3D DEPTH SEEN · MOVE THE PHONE SIDEWAYS, DON'T TURN IT")
+                    }
+                    Verdict.VIDEO -> {
+                        fx.fail()
+                        say("movement but no depth · ${d.indep} moving / ${d.parallax} depth points of ${d.tracks}", Kind.Err)
+                        say("videos can't be registered · real animals: move the phone a hand's width sideways, don't turn it", Kind.Warn)
+                        model.say("NOT ENOUGH DEPTH · MOVE THE PHONE FURTHER SIDEWAYS")
+                    }
+                    Verdict.STILL -> { fx.again(); say("no depth signal · slide the phone left, then right, while scanning", Kind.Warn); model.say("MOVE YOUR PHONE SIDEWAYS: LEFT, THEN RIGHT") }
                     Verdict.ONEWAY -> { fx.again(); say("one-way motion · slide left AND back right to verify depth", Kind.Warn); model.say("SLIDE LEFT, THEN BACK RIGHT") }
                     else -> {
                         fx.again()

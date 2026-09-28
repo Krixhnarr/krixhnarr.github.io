@@ -315,7 +315,7 @@ fun StatsSection(e: Entry, count: Int?) {
 private val HELP = mapOf(
     "scan" to ("How scanning works" to listOf(
         "Aim" to "Point at one real, live animal — close and well lit.",
-        "Sweep" to "Tap scan and slide your phone left, then right. Keep the animal in the ring.",
+        "Sweep" to "Tap scan and move the whole phone sideways about a hand's width — left, then back right — like sliding it along a table. Don't turn it: turning shows no depth. Keep the animal in the ring.",
         "Grade" to "A steady sweep earns S, A, B or C — better grades pay more ◆ and XP. S doubles holo odds.",
         "Real only" to "Photos, prints, screens and videos are rejected: the sweep checks for real 3D depth.",
     )),
@@ -370,7 +370,7 @@ private fun IntroSheet(model: GameModel) {
     val c = LocalWd.current
     SheetHead("How to play", "WildDex", "real-world animal card collector")
     Steps(listOf(
-        "Scan" to "Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and slowly slide your phone left, then right. Cards only drop for live 3D animals — never photos, screens or videos.",
+        "Scan" to "Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and move the whole phone sideways — left, then back right (don't turn it). Cards only drop for live 3D animals — never photos, screens or videos.",
         "Pull the card" to "New species drop a sealed card. Tap to decrypt it and add it to your binder.",
         "Level up" to "Scan the same animal again to power up its card — more stars, better stats. A smooth sweep earns a higher sync grade, and any scan can drop a rare holo card.",
         "Battle" to "Build a squad of three in the Arena and beat today's rival. Use type matchups: every affinity beats two others.",
