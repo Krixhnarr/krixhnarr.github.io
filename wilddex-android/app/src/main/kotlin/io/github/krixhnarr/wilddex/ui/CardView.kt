@@ -73,7 +73,7 @@ fun CardView(e: Entry, rec: CardRecord?, modifier: Modifier = Modifier, intel: B
     val tc = if (known) typeColor(e) else Color(0xFF8DA0B0)
     val locked = rec == null
     val holo = rec?.holo != null
-    val lv = rec?.let { Game.levelFor(it.count) } ?: 0
+    val lv = rec?.let { Game.cardLevel(it) } ?: 0
     val obsidian = frame == "obsidian" && !locked
     val ink = if (obsidian) Color(0xFFEDE3C4) else INK
     val hi = if (obsidian) Color(0xFFFFF1C9) else HI

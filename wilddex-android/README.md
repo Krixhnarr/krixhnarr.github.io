@@ -63,6 +63,16 @@ previous MobileNet v2; with the acceptance rule, 84% of photos were accepted
 and 2.3% of those were wrong (before the two-look agreement check).
 Nothing is uploaded.
 
+## Levelling
+
+Card levels (1–10, +3 to every stat per level) are bought with credits in the
+binder or the card view — `Game.upgradeCost`: 20◆ × current level × rarity
+(Common ×1, Uncommon ×1.5, Rare ×2, Legendary ×3). Re-scanning an animal you
+already have only logs a sighting (and can turn up a holo); it pays no credits
+or XP, so it can't be farmed. Credits come from new discoveries and their sync
+grade, completed sectors, daily orders, weekly events, the streak, battles and
+operator level-ups. Older saves keep the levels their cards had reached.
+
 ## Build
 
 Needs JDK 17+ and the Android SDK (compileSdk 36).

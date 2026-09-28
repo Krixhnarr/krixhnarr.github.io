@@ -142,7 +142,6 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
         if (r.isNew) model.fx.charge()
         else {
             model.fx.again()
-            if (r.lvAfter > r.lvBefore) launch { burst.animateTo(1f, tween(1200)) }
             startDetail()
         }
     }
@@ -211,13 +210,12 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
         Column {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (r.holoNew) Chip("✦ Holo variant", holo = true)
-                if (r.isNew) Chip(PULL.getValue(e.r), highlight = true) else Chip("● Sighting logged ×${r.count}")
+                if (r.isNew) Chip(PULL.getValue(e.r), highlight = true) else Chip("● Already in your binder")
             }
             FlowRow(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (g in r.gains) Chip(g.text, highlight = g.highlight && !g.holo, holo = g.holo)
             }
-            XpBar(r.xpBefore, r.xpAfter)
-            if (!r.isNew && r.lvAfter > r.lvBefore) PowerUp(r.entry, r.lvBefore, r.lvAfter)
+            if (r.xpGain > 0) XpBar(r.xpBefore, r.xpAfter)
             CardDetail(model, e, typing = true)
             Actions {
                 ChunkyButton("Play audio", icon = { LineIcon(Icon.Speaker, Modifier.size(18.dp), c.hi) }) { model.fx.speak("${e.n}. ${e.t}") }
@@ -229,28 +227,6 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable { model.rollback(sheet) }.padding(8.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun PowerUp(e: io.github.krixhnarr.wilddex.core.Entry, before: Int, after: Int) {
-    val c = LocalWd.current
-    val a = Game.statsFor(e, before)
-    val b = Game.statsFor(e, after)
-    Panel(Modifier.fillMaxWidth().padding(top = 10.dp), tint = c.gold, border = c.gold) {
-        Text("POWER UP  LV $before → $after", style = display(16.sp, c.hi), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Stars(Game.stars(before), 12.dp, c.line2)
-            Text("  ▸  ", style = mono(12.sp, c.dim))
-            Stars(Game.stars(after), 14.dp, c.line2)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            for (k in Game.STAT_KEYS) Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(k.uppercase(), style = mono(9.sp, c.dim, FontWeight.Bold))
-                Text("${b[k]}", style = display(16.sp, c.hi))
-                Text("+${b[k] - a[k]}", style = mono(10.sp, c.good, FontWeight.Bold))
-            }
         }
     }
 }

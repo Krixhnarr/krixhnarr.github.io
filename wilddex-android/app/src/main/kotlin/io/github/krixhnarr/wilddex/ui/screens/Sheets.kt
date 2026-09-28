@@ -218,7 +218,7 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
                 append(e.f)
             }, style = mono(12.sp, c.ink))
         }
-        StatsSection(e, rec.count)
+        StatsSection(model, e, rec)
         Section("Field data", "${rarity.value} XP") {
             Fact("Habitat", e.h); Fact("Diet", e.d); Fact("Size", e.z)
         }
@@ -256,7 +256,7 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
                 style = mono(12.sp, c.ink),
             )
         }
-        StatsSection(e, null)
+        StatsSection(model, e, null)
     }
 }
 
@@ -280,32 +280,46 @@ private fun TypedText(text: String, typing: Boolean) {
 }
 
 @Composable
-fun StatsSection(e: Entry, count: Int?) {
+fun StatsSection(model: GameModel, e: Entry, rec: io.github.krixhnarr.wilddex.core.CardRecord?) {
     val c = LocalWd.current
-    val lv = count?.let { Game.levelFor(it) } ?: 1
+    val s = model.live
+    val owned = rec != null
+    val lv = rec?.let { Game.cardLevel(it) } ?: 1
     val st = Game.statsFor(e, lv)
     val tc = typeColor(e)
-    Section("Battle stats · Lv ${if (count != null) lv else "—"}") {
-        if (count != null) Row(Modifier.padding(bottom = 8.dp)) { Stars(Game.stars(lv), 13.dp, c.line2) }
+    var boosted by remember(e.k) { mutableStateOf<io.github.krixhnarr.wilddex.core.Progress.Upgrade?>(null) }
+    val glow = remember(e.k) { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(boosted) { if (boosted != null) { glow.snapTo(1f); glow.animateTo(0f, androidx.compose.animation.core.tween(1200)) } }
+    Section("Battle stats · Lv ${if (owned) lv else "—"}") {
+        if (owned) Row(Modifier.padding(bottom = 8.dp)) { Stars(Game.stars(lv), 13.dp, c.line2) }
+        val before = boosted?.let { Game.statsFor(e, it.before) }
         for (k in Game.STAT_KEYS) {
             Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(k.uppercase(), style = mono(11.sp, c.dim, FontWeight.Bold), modifier = Modifier.width(40.dp))
-                Bar(if (count != null) st[k] / 100f else 0f, tc, Modifier.weight(1f), height = 9.dp)
-                Text(if (count != null) "${st[k]}" else "??", style = mono(12.sp, c.hi, FontWeight.Bold), modifier = Modifier.width(38.dp), textAlign = TextAlign.End)
+                Bar(if (owned) st[k] / 100f else 0f, androidx.compose.ui.graphics.lerp(tc, c.gold, glow.value), Modifier.weight(1f), height = 9.dp)
+                Text(if (owned) "${st[k]}" else "??", style = mono(12.sp, c.hi, FontWeight.Bold), modifier = Modifier.width(38.dp), textAlign = TextAlign.End)
+                if (before != null) Text("+${st[k] - before[k]}", style = mono(11.sp, c.good, FontWeight.Bold), modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             Text("POWER", style = mono(11.sp, c.dim, FontWeight.Bold, 0.1f), modifier = Modifier.weight(1f))
-            Text(if (count != null) "${st.pwr}" else "???", style = display(18.sp, c.hi))
+            Text(if (owned) "${st.pwr}" else "???", style = display(18.sp, c.hi))
         }
-        if (count != null) {
-            val next = Game.nextLevelAt(lv)
-            val prev = 1 shl (lv - 1)
-            Text(
-                if (next != null) "$count/$next sightings to Lv ${lv + 1}" else "Max level reached",
-                style = mono(11.sp, c.dim), modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-            )
-            Bar(if (next != null) (count - prev).toFloat() / (next - prev) else 1f, c.gold, Modifier.fillMaxWidth(), height = 7.dp)
+        if (owned) {
+            val cost = Game.upgradeCost(e, lv)
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when {
+                        cost == null -> "Max level reached"
+                        s.shards >= cost -> "Spend credits to power it up"
+                        else -> "Need ${cost - s.shards}◆ more · earn ◆ from new animals, orders and events"
+                    },
+                    style = mono(11.sp, c.dim), modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
+                if (cost != null) ChunkyButton("Lv ${lv + 1} · $cost◆", kind = if (s.shards >= cost) Btn.Primary else Btn.Neutral, small = true, enabled = s.shards >= cost) {
+                    model.upgradeCard(e.k)?.let { boosted = it }
+                }
+            }
         }
     }
 }
@@ -315,7 +329,8 @@ private val HELP = mapOf(
     "scan" to ("How scanning works" to listOf(
         "Aim" to "Point at one real, live animal — near or far, big or small. Fill the ring if you can.",
         "Hold" to "Tap scan and hold the phone steady for a moment while the ring fills.",
-        "Grade" to "Sharp, steady scans earn S, A, B or C — better grades pay more ◆ and XP. S needs real depth: keep a bit of the background in view. S doubles holo odds.",
+        "Grade" to "Sharp, steady scans earn S, A, B or C — on a new animal, better grades pay more ◆ and XP. S needs real depth: keep a bit of the background in view. S doubles holo odds.",
+        "Again?" to "Scanning an animal you already have logs a sighting and can turn up a holo, but pays no ◆ and doesn't level the card — use ◆ in your binder for that.",
         "Real only" to "Screens, phones, printed photos and books are rejected: the scanner looks for display pixels, device edges and paper borders.",
     )),
     "types" to ("Type matchups" to listOf(
@@ -371,7 +386,7 @@ private fun IntroSheet(model: GameModel) {
     Steps(listOf(
         "Scan" to "Point the camera at a real, living animal — a pet, a park bird, a garden bug, a zoo lion — press scan and hold steady for a moment. Cards only drop for live 3D animals — never photos, screens or videos.",
         "Pull the card" to "New species drop a sealed card. Tap to decrypt it and add it to your binder.",
-        "Level up" to "Scan the same animal again to power up its card — more stars, better stats. A sharp, steady scan earns a higher sync grade, and any scan can drop a rare holo card.",
+        "Level up" to "Spend credits (◆) to power up a card — more stars, better stats. Earn ◆ by discovering new animals and completing daily orders, weekly events and battles. Any scan can drop a rare holo card.",
         "Battle" to "Build a squad of three in the Arena and beat today's rival. Use type matchups: every affinity beats two others.",
         "Complete" to "${Dex.total} cards · ${Dex.typeIds.size} affinities · ${Dex.sets.size} sectors. Clear daily orders, keep your streak, level up for supply crates, and spend credits on intel and crates.",
     ))
