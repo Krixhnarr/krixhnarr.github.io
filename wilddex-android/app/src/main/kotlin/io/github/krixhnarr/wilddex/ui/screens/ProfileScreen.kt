@@ -247,7 +247,9 @@ private fun ConfigPanel(model: GameModel, s: PlayerState) {
         Toggle("Sound FX", null, s.settings.sound) { v -> model.update { settings.sound = v }; if (v) model.fx.click() }
         Toggle("Haptics", null, s.settings.haptics) { v -> model.update { settings.haptics = v }; if (v) model.fx.buzz(20) }
         Toggle("Card tilt", "Cards lean as you move your phone", s.settings.tilt) { v -> model.update { settings.tilt = v } }
-        Toggle("Location tags", "Map your finds (~1 km, on this phone)", s.settings.location) { v -> model.update { settings.location = v } }
+        Toggle("Location tags", "Map your finds (~1 km, on this phone)", s.settings.location) { v ->
+            if (v) model.enableLocation?.invoke() ?: model.update { settings.location = true } else model.update { settings.location = false }
+        }
     }
 }
 

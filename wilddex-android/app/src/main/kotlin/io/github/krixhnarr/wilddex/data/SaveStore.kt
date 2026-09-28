@@ -37,5 +37,7 @@ class SaveStore(context: Context) {
 
     fun photo(key: String): File? = File(photos, "$key.jpg").takeIf { it.exists() }
 
+    fun deletePhoto(key: String) { io.execute { File(photos, "$key.jpg").delete() } }
+
     fun wipePhotos() { photos.listFiles()?.forEach { it.delete() } }
 }

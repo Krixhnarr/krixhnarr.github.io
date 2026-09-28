@@ -10,9 +10,6 @@ import io.github.krixhnarr.wilddex.GameModel
 import io.github.krixhnarr.wilddex.core.CaptureResult
 import io.github.krixhnarr.wilddex.core.Recognition
 
-@Composable fun ScanScreen(model: GameModel) { Column(Modifier.fillMaxSize().padding(16.dp)) { ScreenTitle("Scan") } }
 @Composable fun ArenaScreen(model: GameModel) { Column(Modifier.fillMaxSize().padding(16.dp)) { ScreenTitle("Arena") } }
-@Composable fun RevealSheet(model: GameModel, r: CaptureResult) {}
-@Composable fun ChoicesSheet(model: GameModel, options: List<Recognition.Candidate>, text: String) {}
 @Composable fun SquadSheet(model: GameModel, slot: Int) {}
 @Composable fun FightSheet(model: GameModel, kind: String) {}

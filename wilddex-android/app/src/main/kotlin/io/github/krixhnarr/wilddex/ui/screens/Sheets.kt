@@ -77,7 +77,7 @@ fun SheetContent(model: GameModel, sheet: Sheet) {
         is Sheet.Help -> HelpSheet(model, sheet.topic)
         Sheet.Intro -> IntroSheet(model)
         is Sheet.Crate -> CrateSheet(model, sheet.free)
-        is Sheet.Reveal -> RevealSheet(model, sheet.result)
+        is Sheet.Reveal -> RevealSheet(model, sheet)
         is Sheet.Choices -> ChoicesSheet(model, sheet.options, sheet.text)
         is Sheet.Squad -> SquadSheet(model, sheet.slot)
         is Sheet.Fight -> FightSheet(model, sheet.kind)

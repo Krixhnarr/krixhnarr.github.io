@@ -74,6 +74,8 @@ data class Settings(
     var location: Boolean = false,
     var haptics: Boolean = true,
     var theme: String = "auto",
+    /** Turn the camera on by itself when opening Scan (the player allowed it before). */
+    var camera: Boolean = false,
 )
 
 @Serializable

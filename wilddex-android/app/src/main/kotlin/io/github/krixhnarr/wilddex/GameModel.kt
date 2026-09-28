@@ -1,5 +1,6 @@
 package io.github.krixhnarr.wilddex
 
+import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -8,6 +9,7 @@ import androidx.compose.runtime.setValue
 import io.github.krixhnarr.wilddex.core.Battle
 import io.github.krixhnarr.wilddex.core.CaptureResult
 import io.github.krixhnarr.wilddex.core.Clock
+import io.github.krixhnarr.wilddex.core.Entry
 import io.github.krixhnarr.wilddex.core.Game
 import io.github.krixhnarr.wilddex.core.Progress
 import io.github.krixhnarr.wilddex.core.LevelUp
@@ -21,7 +23,7 @@ enum class Tab { Home, Cards, Scan, Arena, Ops, Id }
 /** Things that slide up over the current screen. */
 sealed interface Sheet {
     data class Card(val key: String) : Sheet
-    data class Reveal(val result: CaptureResult) : Sheet
+    data class Reveal(val result: CaptureResult, val alternatives: List<Recognition.Candidate>, val snapshot: PlayerState) : Sheet
     data class Choices(val options: List<Recognition.Candidate>, val text: String) : Sheet
     data class Squad(val slot: Int) : Sheet
     data class Fight(val kind: String, val nonce: Long = System.nanoTime()) : Sheet
@@ -46,6 +48,14 @@ interface Fx {
     fun reveal(rarity: Int) {}
     fun crack(hit: Int) {}
     fun buzz(vararg pattern: Long) {}
+    fun tick(p: Float) {}
+    fun lock() {}
+    fun scan() {}
+    fun fail() {}
+    fun again() {}
+    fun charge() {}
+    fun holo() {}
+    fun grade(g: String) {}
     fun speak(text: String) {}
     fun stopSpeaking() {}
     object Silent : Fx
@@ -117,6 +127,40 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
         fresh.clear()
         say("BINDER WIPED")
         commit()
+    }
+
+    /** The last verified scan, waiting to be registered (directly or via manual choice). */
+    class PendingScan(val grade: Game.Grade?, val photo: Bitmap?)
+    var pending: PendingScan? = null
+    /** Set by the activity: tags a capture with the phone's rough location if enabled. */
+    var tagLocation: ((String) -> Unit)? = null
+    /** Set by the activity: asks for location permission, then turns location tags on. */
+    var enableLocation: (() -> Unit)? = null
+
+    /** Registers a verified capture and opens the reveal. */
+    fun register(e: Entry, form: Int, alternatives: List<Recognition.Candidate>) {
+        val p = pending
+        pending = null
+        val snapshot = state.copyDeep()
+        val r = Progress.register(state, e, form, p?.grade)
+        if (r.isNew) p?.photo?.let { store?.savePhoto(e.k, it) }
+        if (r.isNew && e.k !in fresh) fresh += e.k
+        tagLocation?.invoke(e.k)
+        commit()
+        queueLevelUps(r.levelUps)
+        fx.buzz(*(if (!r.isNew) longArrayOf(30) else when (e.r) { 4 -> longArrayOf(40, 60, 40, 60, 200); 3 -> longArrayOf(30, 40, 30, 40, 120); else -> longArrayOf(30, 40, 80) }))
+        open(Sheet.Reveal(r, alternatives.filter { it.entry != e }, snapshot))
+    }
+
+    /** "Misidentified?" — undo everything a registration did, then offer the other candidates. */
+    fun rollback(r: Sheet.Reveal) {
+        val e = r.result.entry
+        replace(r.snapshot)
+        levelUps.clear()
+        if (r.result.isNew) { store?.deletePhoto(e.k); fresh.remove(e.k) }
+        fx.stopSpeaking()
+        if (r.alternatives.isNotEmpty()) open(Sheet.Choices(r.alternatives, "Rolled back ${e.n}. Was it one of these?"))
+        else { close(); say("REGISTRATION ROLLED BACK") }
     }
 
     fun go(t: Tab) { if (t != tab) fx.click(); tab = t }
