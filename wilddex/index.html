@@ -3,193 +3,145 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>WildDex</title>
-  <meta name="description" content="Scan real animals and collect them as cards — a field-scanner collectible game.">
+  <title>WildDex is moving to Android</title>
+  <meta name="description" content="WildDex is becoming a native Android app. Download your saved progress to bring it with you.">
   <meta name="theme-color" content="#62C4FF">
-  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="mobile-web-app-capable" content="yes">
-  <link rel="preload" href="fonts/russo-one-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    @font-face { font-family: 'Russo One'; src: url('fonts/russo-one-latin.woff2') format('woff2'); font-display: swap; }
+    :root {
+      --sky-top: #62C4FF; --sky-bottom: #D4F1FF; --hill: #5DCB63; --hill2: #3FAE55;
+      --surface: #FFFFFF; --ink: #1E3346; --hi: #13283A; --dim: #5B7083; --line: rgba(30, 51, 70, .12);
+      --sun: #FFC83D; --sun2: #FFB01F; --sun-press: #D18A00; --on-sun: #3F2B00; --accent: #2F9BEA;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --sky-top: #0B1633; --sky-bottom: #26306A; --hill: #1F4B45; --hill2: #173B38;
+        --surface: #1B274B; --ink: #E6EEFB; --hi: #FFFFFF; --dim: #A5B4D0; --line: rgba(200, 220, 255, .14);
+        --accent: #4FB3FF;
+      }
+      :root:not([data-theme="light"]) .sun { background: radial-gradient(circle at 60% 40%, #FFFBEA, #F3EBC8 60%, #D9CFA8); box-shadow: 0 0 50px rgba(255, 245, 210, .35); }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: linear-gradient(var(--sky-top), var(--sky-bottom) 70%);
+      color: var(--ink); font: 16px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center; overflow-x: clip;
+    }
+    .hills { position: fixed; inset: auto 0 0 0; height: 32vh; z-index: -1; }
+    .hills i { position: absolute; left: -20%; right: -20%; bottom: 0; border-radius: 50% 50% 0 0; }
+    .hills i:nth-child(1) { height: 70%; background: var(--hill); left: -40%; right: 10%; }
+    .hills i:nth-child(2) { height: 55%; background: var(--hill2); left: 20%; right: -40%; }
+    .sun { position: fixed; top: 6vh; right: 8vw; width: 110px; height: 110px; border-radius: 50%;
+      background: radial-gradient(circle at 40% 40%, #FFE89A, var(--sun) 60%, var(--sun2)); box-shadow: 0 0 60px rgba(255, 200, 61, .6); z-index: -1; }
+    main { width: min(560px, 100% - 32px); margin: 12vh 0 40px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 26px 22px;
+      box-shadow: 0 6px 0 rgba(30, 51, 70, .12); }
+    .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .logo img { width: 52px; height: 52px; border-radius: 14px; }
+    .logo b { font: 26px 'Russo One', system-ui, sans-serif; color: var(--hi); letter-spacing: .03em; }
+    h1 { font: 28px/1.15 'Russo One', system-ui, sans-serif; color: var(--hi); margin: 0 0 10px; }
+    p { margin: 0 0 14px; }
+    .pill { display: inline-block; font: 700 12px ui-monospace, 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase;
+      background: var(--accent); color: #fff; border-radius: 12px; padding: 5px 10px; margin-bottom: 14px; }
+    .save { margin-top: 20px; padding-top: 18px; border-top: 1px dashed var(--line); }
+    .save h2 { font: 18px 'Russo One', system-ui, sans-serif; color: var(--hi); margin: 0 0 6px; }
+    .stats { font: 13px ui-monospace, 'JetBrains Mono', monospace; color: var(--dim); margin-bottom: 14px; }
+    button { font: 15px 'Russo One', system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; cursor: pointer;
+      color: var(--on-sun); background: linear-gradient(#FFDE6E, var(--sun2)); border: 1px solid var(--sun-press);
+      border-radius: 12px; padding: 13px 20px; box-shadow: 0 4px 0 var(--sun-press); width: 100%; }
+    button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--sun-press); }
+    button:disabled { opacity: .5; cursor: default; }
+    ol { padding-left: 20px; margin: 12px 0 0; color: var(--dim); font-size: 14px; }
+    small { color: var(--dim); }
+    [hidden] { display: none !important; }
+  </style>
 </head>
 <body>
-  <div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i><b></b>
-    <span class="flock"><svg viewBox="0 0 96 40"><g transform="translate(0 14)"><g class="bird"><path d="M0 8q5-7 10 0q5-7 10 0"/></g></g><g transform="translate(30 0) scale(.85)"><g class="bird"><path d="M0 8q5-7 10 0q5-7 10 0"/></g></g><g transform="translate(58 20) scale(.7)"><g class="bird"><path d="M0 8q5-7 10 0q5-7 10 0"/></g></g></svg></span>
-    <span class="bfly b1"><svg viewBox="0 0 24 20"><g class="wing"><ellipse cx="7" cy="7" rx="6" ry="5"/><ellipse cx="8.5" cy="14" rx="3.8" ry="3.4"/></g><g class="wing r"><ellipse cx="17" cy="7" rx="6" ry="5"/><ellipse cx="15.5" cy="14" rx="3.8" ry="3.4"/></g><rect class="body" x="11.3" y="4" width="1.4" height="13" rx=".7"/></svg></span>
-    <span class="bfly b2"><svg viewBox="0 0 24 20"><g class="wing"><ellipse cx="7" cy="7" rx="6" ry="5"/><ellipse cx="8.5" cy="14" rx="3.8" ry="3.4"/></g><g class="wing r"><ellipse cx="17" cy="7" rx="6" ry="5"/><ellipse cx="15.5" cy="14" rx="3.8" ry="3.4"/></g><rect class="body" x="11.3" y="4" width="1.4" height="13" rx=".7"/></svg></span>
-    <span class="tuft t1"></span><span class="tuft t2"></span><span class="tuft t3"></span><span class="tuft t4"></span><span class="tuft t5"></span>
-    <em class="shoot"></em>
-  </div>
-  <div class="app">
-    <header class="topbar">
-      <button type="button" class="op-chip" data-tab="id" aria-label="Operator profile">
-        <span class="op-hex"><b id="op-level">1</b></span>
-        <span class="op-meta"><b id="op-name">Operator</b><span class="op-xp" aria-hidden="true"><em id="op-xp-bar"></em></span></span>
-        <i class="badge" id="id-badge" hidden></i>
-      </button>
-      <div class="pills">
-        <button type="button" class="pill crates" data-tab="id" data-goto="supply" aria-label="Supply crates">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5 12 4l9 4.5v9L12 22l-9-4.5Z"/><path d="M3 8.5 12 13l9-4.5M12 13v9"/></svg><b id="crates">0</b>
-        </button>
-        <span class="pill credits" id="meters" role="img" aria-label="Credits">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 21 9l-9 13L3 9Z"/><path d="M3 9h18M9 9l3 13 3-13M8 2.8 9 9l3-7 3 7 1-6.2"/></svg><b id="shards">0</b>
-        </span>
-      </div>
-    </header>
+  <div class="sun" aria-hidden="true"></div>
+  <div class="hills" aria-hidden="true"><i></i><i></i></div>
+  <main>
+    <div class="card">
+      <div class="logo"><img src="icons/icon-192.png" alt=""><b>WildDex</b></div>
+      <span class="pill">Coming to Google Play</span>
+      <h1>WildDex is becoming an Android app</h1>
+      <p>The web version has closed. WildDex is being rebuilt as a native Android app — faster scanning, better camera
+        control and the same cards, battles and music.</p>
+      <p><small>Scanning still happens on your phone, and your photos never leave it.</small></p>
 
-    <main>
-      <!-- HOME -->
-      <section class="view" data-view="home">
-        <div id="home"></div>
+      <section class="save" id="save" hidden>
+        <h2>Your cards are still here</h2>
+        <p class="stats" id="stats"></p>
+        <button type="button" id="download">Download my progress</button>
+        <ol>
+          <li>Keep the downloaded <b>.json</b> file on your phone.</li>
+          <li>Install the WildDex Android app.</li>
+          <li>Open <b>Operator → Backup → Import</b> and pick the file.</li>
+        </ol>
       </section>
-
-      <!-- SCAN -->
-      <section class="view" data-view="scan" hidden>
-        <div class="screen-head">
-          <div><h1 class="screen-title">Scan</h1></div>
-          <button type="button" class="help-btn" data-help="scan" aria-label="How scanning works">?</button>
-        </div>
-
-        <div class="viewfinder" id="viewfinder">
-          <video id="video" playsinline muted></video>
-          <canvas id="freeze" width="448" height="448" aria-hidden="true"></canvas>
-          <div class="vf-dots" aria-hidden="true"></div>
-          <svg class="hud" viewBox="0 0 100 100" aria-hidden="true">
-            <g class="ticks"><circle cx="50" cy="50" r="46" /></g>
-            <g class="rings">
-              <circle cx="50" cy="50" r="36" />
-              <circle cx="50" cy="50" r="26" />
-              <circle cx="50" cy="50" r="16" />
-            </g>
-            <circle cx="44.5" cy="50" r="1.3" class="dot" />
-            <circle cx="55.5" cy="50" r="1.3" class="dot" />
-            <path class="cross" d="M50 8v6M50 86v6M8 50h6M86 50h6" />
-            <path class="brackets" d="M4 14V4h10M86 4h10v10M96 86v10H86M14 96H4V86" />
-          </svg>
-          <div class="readout tl"><span id="rec">○ STBY</span></div>
-          <div class="readout bl" id="lens">LENS:REAR</div>
-          <div class="sweep" aria-hidden="true"></div>
-          <div class="lockon" id="lockon" aria-hidden="true">
-            <svg viewBox="0 0 100 100">
-              <circle class="lk-ticks" cx="50" cy="50" r="36"/>
-              <circle class="lk-track" cx="50" cy="50" r="30"/>
-              <circle class="lk-arc" id="lock-arc" cx="50" cy="50" r="30" pathLength="100"/>
-              <g class="lk-reticle"><circle cx="50" cy="50" r="21"/><path d="M50 16v9M50 75v9M16 50h9M75 50h9"/></g>
-            </svg>
-            <div class="lk-core"><small>SYNC</small><b id="lock-pct">0%</b></div>
-            <p class="lk-stamp">LOCKED</p>
-          </div>
-          <div class="sweep-guide" aria-live="polite">
-            <p><span class="arr l">◀◀◀</span><b id="sweep-text">Slide phone left</b><span class="arr r">▶▶▶</span></p>
-            <i class="bar"><span id="sweep-bar"></span></i>
-          </div>
-          <div class="vf-overlay" id="vf-overlay">
-            <p class="vf-title">Camera off</p>
-            <p class="vf-text" id="vf-text">Point it at a real, live animal.</p>
-            <button type="button" class="btn primary big" id="btn-camera">Turn on camera</button>
-          </div>
-        </div>
-
-        <div class="term" id="term" role="log" aria-live="polite" aria-label="Scanner log"></div>
-
-        <div class="controls">
-          <button type="button" class="side-btn" id="btn-torch" title="Flashlight" aria-pressed="false" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v4l-2 3v11h-4V10L8 7Z"/><path d="M8 7h8M12 13v2"/></svg>
-            <span>Light</span>
-          </button>
-          <button type="button" class="scan-btn" id="btn-scan" aria-label="Scan">
-            <span class="scan-orbit"></span><span class="scan-core"></span><span class="scan-label">SCAN</span>
-          </button>
-          <button type="button" class="side-btn" id="btn-flip" title="Switch camera">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h11l-3-3M20 16H9l3 3"/></svg>
-            <span>Flip</span>
-          </button>
-        </div>
-
-        <section class="recent" id="recent-wrap" hidden>
-          <div class="section-head"><h2>Recent pulls</h2></div>
-          <div class="recent-strip" id="recent"></div>
-        </section>
-      </section>
-
-      <!-- INVENTORY -->
-      <section class="view" data-view="binder" hidden>
-        <div class="screen-head">
-          <div><h1 class="screen-title">Cards</h1><p class="sub" id="binder-sub"></p></div>
-        </div>
-
-        <div class="filters">
-          <div class="chips" id="set-chips" role="tablist" aria-label="Sectors"></div>
-          <div class="type-filter" id="type-chips" aria-label="Filter by affinity"></div>
-          <div class="filter-row">
-            <label class="select"><span>sort</span>
-              <select id="sort">
-                <option value="no">number</option>
-                <option value="rarity">rarity</option>
-                <option value="level">level</option>
-                <option value="pwr">power</option>
-                <option value="recent">recent</option>
-              </select>
-            </label>
-            <label class="check"><input type="checkbox" id="owned-only"> owned only</label>
-          </div>
-        </div>
-
-        <section class="inv-detail chamfer" id="inv-detail" aria-live="polite"></section>
-        <div class="slot-grid" id="grid"></div>
-        <p class="empty" id="grid-empty" hidden>No cards match these filters yet.</p>
-      </section>
-
-      <!-- ARENA -->
-      <section class="view" data-view="arena" hidden>
-        <div class="screen-head">
-          <div><h1 class="screen-title">Arena</h1><p class="sub" id="arena-sub"></p></div>
-        </div>
-        <div id="arena"></div>
-      </section>
-
-      <!-- OPS -->
-      <section class="view" data-view="ops" hidden>
-        <div class="screen-head">
-          <div><h1 class="screen-title">Ops</h1></div>
-        </div>
-        <div id="ops"></div>
-      </section>
-
-      <!-- ID -->
-      <section class="view" data-view="id" hidden>
-        <div class="screen-head">
-          <div><h1 class="screen-title">Operator</h1><p class="sub" id="rank-sub"></p></div>
-        </div>
-        <div id="profile"></div>
-      </section>
-    </main>
-  </div>
-
-  <nav class="tabbar" aria-label="Sections">
-    <button type="button" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg><span>Home</span></button>
-    <button type="button" data-tab="binder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="13" height="17" rx="2"/><path d="M4 7v12a2 2 0 0 0 2 2h10"/><path d="m13.5 8.5 1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4Z"/></svg><span>Cards</span></button>
-    <button type="button" class="tab-scan" data-tab="scan"><span class="tab-scan-core"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><circle cx="12" cy="12" r="3.5"/></svg></span><span>Scan</span></button>
-    <button type="button" data-tab="arena"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg><span>Arena</span><i class="badge" id="arena-badge" hidden></i></button>
-    <button type="button" data-tab="ops"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L13 9M9 16h6"/></svg><span>Ops</span><i class="badge" id="ops-badge" hidden></i></button>
-  </nav>
-
-  <div class="sheet" id="sheet" hidden>
-    <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Details" tabindex="-1">
-      <button type="button" class="sheet-close" data-close aria-label="Close">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
-      </button>
-      <div class="sheet-body" id="sheet-body"></div>
     </div>
-  </div>
-  <div class="levelup" id="levelup" hidden role="dialog" aria-modal="true" aria-label="Level up"></div>
-  <div class="boot" id="boot" hidden aria-hidden="true"><pre id="boot-log"></pre></div>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script>
+    // Remove the old offline copy of the web app so this page is what people see.
+    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+    if ('caches' in window) caches.keys().then((ks) => ks.filter((k) => k.startsWith('wilddex-')).forEach((k) => caches.delete(k))).catch(() => {});
 
-  <script type="module" src="js/app.js"></script>
+    // The old app kept progress in localStorage and capture photos in IndexedDB.
+    // Build the same backup file its "Export" button made, which the Android app imports.
+    const KEY = 'wilddex.v1';
+    let state = null;
+    try { state = JSON.parse(localStorage.getItem(KEY)); } catch { state = null; }
+    const cards = state && state.caught ? Object.keys(state.caught).length : 0;
+    if (cards > 0 || (state && state.xp > 0)) {
+      document.getElementById('save').hidden = false;
+      document.getElementById('stats').textContent =
+        `${cards} card${cards === 1 ? '' : 's'} · ${state.shards || 0}◆ credits · ${state.xp || 0} XP saved in this browser`;
+    }
+
+    function photos() {
+      return new Promise((resolve) => {
+        const out = {};
+        let req;
+        try { req = indexedDB.open('wilddex', 1); } catch { resolve(out); return; }
+        req.onupgradeneeded = () => req.result.createObjectStore('photos');
+        req.onerror = () => resolve(out);
+        req.onsuccess = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('photos')) { resolve(out); return; }
+          const store = db.transaction('photos', 'readonly').objectStore('photos');
+          const cur = store.openCursor();
+          const pending = [];
+          cur.onsuccess = () => {
+            const c = cur.result;
+            if (!c) { Promise.all(pending).then(() => resolve(out)); return; }
+            const key = c.key;
+            const blob = c.value;
+            if (blob instanceof Blob) {
+              pending.push(new Promise((r) => { const fr = new FileReader(); fr.onload = () => { out[key] = fr.result; r(); }; fr.onerror = () => r(); fr.readAsDataURL(blob); }));
+            }
+            c.continue();
+          };
+          cur.onerror = () => resolve(out);
+        };
+      });
+    }
+
+    document.getElementById('download').addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      const p = await photos();
+      const json = JSON.stringify({ app: 'wilddex', version: 1, exported: Date.now(), state, photos: p });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = `wilddex-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      btn.disabled = false;
+      btn.textContent = 'Downloaded ✓';
+    });
+  </script>
 </body>
 </html>
