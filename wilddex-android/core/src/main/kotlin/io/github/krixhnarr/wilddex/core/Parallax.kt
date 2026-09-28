@@ -43,7 +43,9 @@ object Parallax {
     private const val GOOD_MATCH = 8.0 // mean abs difference per pixel that needs no second look
     const val RESID = 2.2 // px at LONG=256: beyond tracking noise
     const val MIN_TRACKS = 14
-    private const val PARALLAX_CORR = 0.8 // off-plane motion must follow the hand this closely
+    private const val NOISE = 1.0 // px: residuals below this are tracking noise
+    private const val MIN_PARALLAX = 2.0 // px of hand-following shift off the plane (above lens distortion)
+    private const val PARALLAX_T = 3.5 // how clearly that shift follows the hand (t-statistic)
 
     private class P(val x: Double, val y: Double, val cost: Double = 0.0)
 
@@ -320,14 +322,6 @@ object Parallax {
         return (0 until n).map { i -> val p = project(hm, s[i]); P((d[i].x - p.x) / dsc, (d[i].y - p.y) / dsc) }
     }
 
-    private fun pearson(a: DoubleArray, b: DoubleArray): Double {
-        val n = a.size
-        val ma = a.average(); val mb = b.average()
-        var sab = 0.0; var saa = 0.0; var sbb = 0.0
-        for (i in 0 until n) { val x = a[i] - ma; val y = b[i] - mb; sab += x * y; saa += x * x; sbb += y * y }
-        return if (saa != 0.0 && sbb != 0.0) sab / sqrt(saa * sbb) else 0.0
-    }
-
     private fun groupedCount(pts: List<P>): Int =
         pts.count { p -> pts.count { q -> q !== p && hypot(q.x - p.x, q.y - p.y) < 40 } >= 2 }
 
@@ -367,14 +361,29 @@ object Parallax {
         val back = abs(far - g[tn - 1])
         if (back < max(1.5, 0.25 * (gMax - gMin))) return SweepResult(Verdict.ONEWAY, tracks.size, rangeR)
 
+        // Split each point's off-plane motion into the part that follows the hand
+        // (parallax: it sits at another depth) and the rest (it moved by itself).
+        // A live animal usually has both, so a point counts as 3D when its
+        // hand-following part is clear, even if the animal also breathed or turned.
+        val gMean = g.average()
+        val gc = DoubleArray(tn) { g[it] - gMean }
+        val gss = gc.sumOf { it * it }
         val parallax = mutableListOf<P>(); val indep = mutableListOf<P>()
         res.forEachIndexed { i, e ->
             val amp = e.maxOf { hypot(it.x, it.y) }
-            if (amp <= RESID) return@forEachIndexed
-            val along = DoubleArray(e.size) { e[it].x * ux + e[it].y * uy }
-            val alongAmp = along.maxOf { abs(it) }
-            val r = pearson(along, g)
-            if (abs(r) >= PARALLAX_CORR && alongAmp >= 0.6 * amp) parallax += first[i] else indep += first[i]
+            if (amp <= NOISE) return@forEachIndexed
+            val along = DoubleArray(tn) { e[it].x * ux + e[it].y * uy }
+            val aMean = along.average()
+            val k = if (gss > 0) (0 until tn).sumOf { (along[it] - aMean) * gc[it] } / gss else 0.0
+            val rest = DoubleArray(tn) { along[it] - aMean - k * gc[it] }
+            val restSd = sqrt(rest.sumOf { it * it } / max(1, tn - 2))
+            val se = restSd / sqrt(max(gss, 1e-9))
+            val parallaxPx = abs(k) * (gMax - gMin) // how far it shifted with the hand, relative to the plane
+            val t = if (se > 1e-9) abs(k) / se else Double.POSITIVE_INFINITY
+            when {
+                parallaxPx >= MIN_PARALLAX && t >= PARALLAX_T -> parallax += first[i]
+                amp > RESID -> indep += first[i]
+            }
         }
         val pg = groupedCount(parallax); val ig = groupedCount(indep)
         val verdict = when {
