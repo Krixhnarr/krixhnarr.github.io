@@ -50,6 +50,8 @@ class ScanController(private val model: GameModel, private val context: Context)
 
     private val latest = AtomicReference<Bitmap?>(null)
     private var lastGrab = 0L
+    /** Counts camera frames, so the sweep never records the same frame twice. */
+    @Volatile private var seq = 0L
 
     fun say(text: String, kind: Kind = Kind.Info) {
         log += Line(text, kind)
@@ -71,8 +73,30 @@ class ScanController(private val model: GameModel, private val context: Context)
                 b = Bitmap.createBitmap(b, 0, 0, b.width, b.height, m, true)
             }
             latest.set(b)
+            seq++
         } finally {
             img.close()
+        }
+    }
+
+    /**
+     * Holds exposure and white balance still during the sweep, so the frames
+     * stay comparable while the phone moves (auto-exposure otherwise keeps
+     * changing the brightness mid-sweep).
+     */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun lockExposure(on: Boolean) {
+        val cam = camera ?: return
+        try {
+            val ctl = androidx.camera.camera2.interop.Camera2CameraControl.from(cam.cameraControl)
+            if (on) ctl.setCaptureRequestOptions(
+                androidx.camera.camera2.interop.CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_LOCK, true)
+                    .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AWB_LOCK, true)
+                    .build(),
+            ) else ctl.clearCaptureRequestOptions()
+        } catch (_: Exception) {
+            // not supported on this camera: the tracker copes with exposure changes anyway
         }
     }
 
@@ -99,14 +123,24 @@ class ScanController(private val model: GameModel, private val context: Context)
             // 1) record ~1.9 s while the player slides the phone
             val frames = ArrayList<GrayFrame>(SWEEP_FRAMES)
             var quarter = 0
+            var used = -1L
+            lockExposure(true)
+            val start = System.currentTimeMillis()
             for (i in 0 until SWEEP_FRAMES) {
+                // wait for a frame we haven't used yet (a slow camera can repeat frames)
+                val waitUntil = System.currentTimeMillis() + 200
+                while (seq == used && System.currentTimeMillis() < waitUntil) delay(5)
+                used = seq
                 val f = latest.get() ?: return
                 frames += withContext(Dispatchers.Default) { Frames.gray(f) }
                 progress = (i + 1f) / SWEEP_FRAMES
                 if (i % 3 == 0) fx.tick(progress)
                 if ((progress * 4).toInt() > quarter) { quarter = (progress * 4).toInt(); fx.buzz(12) }
-                if (i < SWEEP_FRAMES - 1) delay(SWEEP_INTERVAL)
+                // keep an even pace however long each step took
+                val next = start + (i + 1) * SWEEP_INTERVAL
+                if (i < SWEEP_FRAMES - 1) delay(maxOf(0L, next - System.currentTimeMillis()))
             }
+            lockExposure(false)
             locked = true
             fx.lock(); fx.buzz(20, 40, 20)
 
@@ -145,6 +179,7 @@ class ScanController(private val model: GameModel, private val context: Context)
             say("scan aborted · please retry", Kind.Err)
             frozen = null
         } finally {
+            lockExposure(false)
             fx.duck(false)
             locked = false
             progress = 0f
@@ -186,7 +221,11 @@ class ScanController(private val model: GameModel, private val context: Context)
                     Verdict.VIDEO -> { fx.fail(); say("liveness failed · moving image on a flat screen · ${d.indep} pts", Kind.Err); say("videos on screens can't be registered", Kind.Err); model.say("VIDEO ON A SCREEN DETECTED · SCAN A LIVE ANIMAL") }
                     Verdict.STILL -> { fx.again(); say("no depth signal · slide the phone left, then right, while scanning", Kind.Warn); model.say("SLIDE YOUR PHONE LEFT, THEN RIGHT") }
                     Verdict.ONEWAY -> { fx.again(); say("one-way motion · slide left AND back right to verify depth", Kind.Warn); model.say("SLIDE LEFT, THEN BACK RIGHT") }
-                    else -> { fx.again(); say("too little detail to verify · move closer or add light", Kind.Warn); model.say("CAN'T VERIFY · MOVE CLOSER OR ADD LIGHT") }
+                    else -> {
+                        fx.again()
+                        say("could only follow ${d.tracks}/${Parallax.MIN_TRACKS} detail points · fill the ring with the animal, slide slowly", Kind.Warn)
+                        model.say("CAN'T VERIFY · GET CLOSER, SLIDE SLOWLY")
+                    }
                 }
                 delay(2200); frozen = null; idle()
             }

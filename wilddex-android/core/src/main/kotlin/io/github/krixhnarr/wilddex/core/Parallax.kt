@@ -38,13 +38,14 @@ data class SweepResult(
 object Parallax {
     const val LONG = 256 // analysis width (long side), px
     private const val PATCH = 4 // 9x9 patches for tracking
-    private const val SEARCH = 7 // search radius around the predicted position
+    private const val SEARCH = 10 // search radius around the predicted position
     private const val MAX_POINTS = 200
+    private const val GOOD_MATCH = 8.0 // mean abs difference per pixel that needs no second look
     const val RESID = 2.2 // px at LONG=256: beyond tracking noise
     const val MIN_TRACKS = 14
     private const val PARALLAX_CORR = 0.8 // off-plane motion must follow the hand this closely
 
-    private class P(val x: Double, val y: Double)
+    private class P(val x: Double, val y: Double, val cost: Double = 0.0)
 
     // ---------------------------------------------------------------- features
     private fun corners(g: FloatArray, w: Int, h: Int): List<P> {
@@ -101,8 +102,36 @@ object Parallax {
         return g[i] * (1 - fx) * (1 - fy) + g[i + 1] * fx * (1 - fy) + g[i + w] * (1 - fx) * fy + g[i + w + 1] * fx * fy
     }
 
-    /** Best match of the patch around (px,py) in `a` near (qx,qy) in `b`, with sub-pixel refinement. */
-    private fun match(a: FloatArray, b: FloatArray, w: Int, h: Int, px: Double, py: Double, qx: Double, qy: Double): P? {
+    /** Summed-area tables of a frame and its square, for O(1) patch mean/contrast. */
+    private class Sums(g: FloatArray, w: Int, h: Int) {
+        private val W = w + 1
+        val s = DoubleArray(W * (h + 1)); val q = DoubleArray(W * (h + 1))
+        init {
+            for (y in 1..h) {
+                var rs = 0.0; var rq = 0.0
+                for (x in 1..w) {
+                    val v = g[(y - 1) * w + x - 1].toDouble()
+                    rs += v; rq += v * v
+                    s[y * W + x] = s[(y - 1) * W + x] + rs
+                    q[y * W + x] = q[(y - 1) * W + x] + rq
+                }
+            }
+        }
+        /** Sum and sum of squares of the (2r+1)² window centred at (cx,cy). */
+        fun at(cx: Int, cy: Int, r: Int, out: DoubleArray) {
+            val x0 = cx - r; val y0 = cy - r; val x1 = cx + r + 1; val y1 = cy + r + 1
+            val a = y0 * W + x0; val b = y0 * W + x1; val c = y1 * W + x0; val d = y1 * W + x1
+            out[0] = s[d] - s[b] - s[c] + s[a]; out[1] = q[d] - q[b] - q[c] + q[a]
+        }
+    }
+
+    /**
+     * Best match of the patch around (px,py) in `a` near (qx,qy) in `b`, with
+     * sub-pixel refinement. Patches are compared after removing their mean and
+     * matching their contrast, so the phone's auto-exposure and white balance
+     * shifting during the sweep don't break the tracks.
+     */
+    private fun match(a: FloatArray, b: FloatArray, bs: Sums, w: Int, h: Int, px: Double, py: Double, qx: Double, qy: Double): P? {
         val lim = PATCH + SEARCH + 2
         if (qx < lim || qy < lim || qx > w - lim || qy > h - lim || px < PATCH + 1 || py < PATCH + 1 || px > w - PATCH - 2 || py > h - PATCH - 2) return null
         val n = (2 * PATCH + 1) * (2 * PATCH + 1)
@@ -112,17 +141,23 @@ object Parallax {
         for (dy in -PATCH..PATCH) for (dx in -PATCH..PATCH) { val v = bilinear(a, w, px + dx, py + dy); tpl[k++] = v; mean += v }
         mean /= n
         var varT = 0.0
-        for (v in tpl) varT += (v - mean) * (v - mean)
+        for (i in 0 until n) { tpl[i] -= mean; varT += tpl[i] * tpl[i] }
         if (varT / n < 60) return null // too flat to track reliably
+        val sdT = sqrt(varT / n)
         val cx = jsRound(qx); val cy = jsRound(qy)
         val size = 2 * SEARCH + 1
         val sad = DoubleArray(size * size)
         var best = Double.POSITIVE_INFINITY; var bi = -1
+        val win = DoubleArray(2)
         for (sy in -SEARCH..SEARCH) for (sx in -SEARCH..SEARCH) {
+            bs.at(cx + sx, cy + sy, PATCH, win)
+            val mB = win[0] / n
+            val sdB = sqrt(max(1e-6, win[1] / n - mB * mB))
+            val gain = (sdT / sdB).coerceIn(0.6, 1.7)
             var s = 0.0; var kk = 0
             for (dy in -PATCH..PATCH) {
                 val row = (cy + sy + dy) * w + cx + sx
-                for (dx in -PATCH..PATCH) { s += abs(b[row + dx] - tpl[kk]); kk++ }
+                for (dx in -PATCH..PATCH) { s += abs((b[row + dx] - mB) * gain - tpl[kk]); kk++ }
             }
             val idx = (sy + SEARCH) * size + (sx + SEARCH)
             sad[idx] = s
@@ -133,22 +168,69 @@ object Parallax {
         if (best / n > 26) return null // poor match
         fun at(x: Int, y: Int) = sad[(y + SEARCH) * size + (x + SEARCH)]
         fun sub(l: Double, c: Double, r: Double): Double { val d = l - 2 * c + r; return if (d > 0) 0.5 * (l - r) / d else 0.0 }
-        return P(cx + bx + sub(at(bx - 1, by), best, at(bx + 1, by)), cy + by + sub(at(bx, by - 1), best, at(bx, by + 1)))
+        return P(cx + bx + sub(at(bx - 1, by), best, at(bx + 1, by)), cy + by + sub(at(bx, by - 1), best, at(bx, by + 1)), best / n)
     }
 
-    /** Each point keeps its frame-0 patch as the template, so tracking error doesn't pile up. */
+    /** Frame shrunk 4× (box filter), for estimating the whole-image motion. */
+    private fun small(f: GrayFrame): Triple<FloatArray, Int, Int> {
+        val sw = f.w / 4; val sh = f.h / 4
+        val out = FloatArray(sw * sh)
+        for (y in 0 until sh) for (x in 0 until sw) {
+            var s = 0f
+            for (dy in 0 until 4) for (dx in 0 until 4) s += f.g[(y * 4 + dy) * f.w + x * 4 + dx]
+            out[y * sw + x] = s / 16
+        }
+        return Triple(out, sw, sh)
+    }
+
+    /**
+     * Whole-image shift from frame a to b (in full-size pixels), by block
+     * matching the shrunk frames over ±32 px. Used to predict where each point
+     * went, so a fast slide or a repeated camera frame doesn't lose the tracks.
+     */
+    private fun globalShift(a: Triple<FloatArray, Int, Int>, b: Triple<FloatArray, Int, Int>): Pair<Double, Double> {
+        val (ga, w, h) = a; val gb = b.first
+        val r = 8
+        var best = Double.POSITIVE_INFINITY; var bx = 0; var by = 0
+        for (sy in -r..r) for (sx in -r..r) {
+            val x0 = r; val x1 = w - r; val y0 = r; val y1 = h - r
+            var ma = 0.0; var mb = 0.0; var n = 0
+            for (y in y0 until y1) for (x in x0 until x1) { ma += ga[y * w + x]; mb += gb[(y + sy) * w + x + sx]; n++ }
+            ma /= n; mb /= n
+            var s = 0.0
+            for (y in y0 until y1) for (x in x0 until x1) s += abs((ga[y * w + x] - ma) - (gb[(y + sy) * w + x + sx] - mb))
+            if (s < best) { best = s; bx = sx; by = sy }
+        }
+        return (bx * 4.0) to (by * 4.0)
+    }
+
+    /**
+     * Each point keeps its frame-0 patch as the template, so tracking error
+     * doesn't pile up. Each point is searched for around where the whole
+     * image moved and around where the point itself was heading.
+     */
     private fun track(frames: List<GrayFrame>): List<List<P>> {
         val w = frames[0].w; val h = frames[0].h
         val pts = corners(frames[0].g, w, h)
         val tracks = pts.map { mutableListOf(it) }
         val vel = pts.map { doubleArrayOf(0.0, 0.0) }
         val alive = BooleanArray(pts.size) { true }
+        var prevSmall = small(frames[0])
         for (f in 1 until frames.size) {
+            val curSmall = small(frames[f])
+            val (gx, gy) = globalShift(prevSmall, curSmall)
+            prevSmall = curSmall
+            val sums = Sums(frames[f].g, w, h)
             for (i in tracks.indices) {
                 if (!alive[i]) continue
                 val p0 = tracks[i][0]
                 val prev = tracks[i][f - 1]
-                val m = match(frames[0].g, frames[f].g, w, h, p0.x, p0.y, prev.x + vel[i][0], prev.y + vel[i][1])
+                // try where the whole image went, and where this point was heading; keep the better match
+                val byImage = match(frames[0].g, frames[f].g, sums, w, h, p0.x, p0.y, prev.x + gx, prev.y + gy)
+                val m = if (byImage != null && byImage.cost < GOOD_MATCH) byImage else {
+                    val byPoint = match(frames[0].g, frames[f].g, sums, w, h, p0.x, p0.y, prev.x + vel[i][0], prev.y + vel[i][1])
+                    listOfNotNull(byImage, byPoint).minByOrNull { it.cost }
+                }
                 if (m == null) { alive[i] = false; continue }
                 vel[i][0] = m.x - prev.x; vel[i][1] = m.y - prev.y
                 tracks[i] += m
