@@ -180,7 +180,7 @@ private fun SquadSlot(model: GameModel, modifier: Modifier, i: Int, k: String) {
     val s = model.live
     val e = Dex.byKey.getValue(k)
     val rec = s.caught.getValue(k)
-    val lv = Game.levelFor(rec.count)
+    val lv = Game.cardLevel(rec)
     Raised(modifier, color = typeColor(e).copy(alpha = 0.16f).compositeOver(c.surface), onClick = { model.fx.click(); model.open(Sheet.Squad(i)) }) {
         Column(Modifier.fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth()) {
@@ -224,7 +224,7 @@ fun SquadSheet(model: GameModel, slot: Int) {
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(e.n + if (rec.holo != null) "  ✦" else "", style = display(15.sp, c.hi))
                         Text(
-                            "LV ${Game.levelFor(rec.count)} · ${Dex.typesOf(e).joinToString(" / ") { Dex.types.getValue(it).name }}${if (at >= 0) " · in slot ${at + 1}" else ""}",
+                            "LV ${Game.cardLevel(rec)} · ${Dex.typesOf(e).joinToString(" / ") { Dex.types.getValue(it).name }}${if (at >= 0) " · in slot ${at + 1}" else ""}",
                             style = mono(10.sp, c.dim),
                         )
                     }

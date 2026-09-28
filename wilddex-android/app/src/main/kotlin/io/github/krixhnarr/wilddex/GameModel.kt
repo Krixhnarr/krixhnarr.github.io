@@ -174,6 +174,20 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
         say("${e.n.uppercase()} UNDONE · SCAN AGAIN")
     }
 
+    /** Spends credits to raise a card one level. */
+    fun upgradeCard(key: String): Progress.Upgrade? {
+        val e = io.github.krixhnarr.wilddex.core.Dex.byKey[key] ?: return null
+        val rec = state.caught[key] ?: return null
+        val cost = Game.upgradeCost(e, Game.cardLevel(rec)) ?: return null
+        val up = Progress.upgradeCard(state, key)
+        if (up == null) { fx.fail(); say("NEED ${cost - state.shards}◆ MORE"); return null }
+        fx.reveal(2); fx.buzz(30, 40, 90)
+        say("${e.n.uppercase()} → LV ${up.after} · −${up.cost}◆")
+        if (up.after == Game.MAX_LEVEL) confetti++
+        commit()
+        return up
+    }
+
     fun go(t: Tab) { if (t != tab) fx.click(); tab = t }
 
     fun claimMission(id: String) {

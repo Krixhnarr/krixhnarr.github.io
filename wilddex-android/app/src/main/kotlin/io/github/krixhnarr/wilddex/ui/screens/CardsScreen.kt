@@ -72,7 +72,7 @@ val RARITY_COLOR = mapOf(1 to Color(0xFF7D8C99), 2 to Color(0xFF2E9B45), 3 to Co
 fun pad3(n: Int) = n.toString().padStart(3, '0')
 
 private fun sorted(s: PlayerState, list: List<Entry>, sort: String): List<Entry> {
-    fun lv(e: Entry) = s.caught[e.k]?.let { Game.levelFor(it.count) } ?: 0
+    fun lv(e: Entry) = s.caught[e.k]?.let { Game.cardLevel(it) } ?: 0
     fun pwr(e: Entry) = if (s.caught[e.k] != null) Game.statsFor(e, lv(e)).pwr else -1
     return when (sort) {
         "rarity" -> list.sortedWith(compareByDescending<Entry> { it.r }.thenBy { it.no })
@@ -245,7 +245,7 @@ private fun InvDetail(model: GameModel, s: PlayerState, e: Entry) {
     val rec = s.caught[e.k]
     val intel = rec == null && s.intel[e.k] == true
     val known = rec != null || intel
-    val lv = rec?.let { Game.levelFor(it.count) } ?: 1
+    val lv = rec?.let { Game.cardLevel(it) } ?: 1
     val st = Game.statsFor(e, lv)
     val tc = typeColor(e)
     Panel(Modifier.fillMaxWidth().padding(bottom = 6.dp), tint = if (known) tc else null) {
@@ -297,6 +297,11 @@ private fun InvDetail(model: GameModel, s: PlayerState, e: Entry) {
                 when { rec != null -> "PWR ${st.pwr}"; intel -> "Find it in ${e.h.lowercase()}"; else -> "Not found yet" },
                 style = mono(11.sp, c.ink, FontWeight.Bold), modifier = Modifier.weight(1f), maxLines = 2,
             )
+            val cost = if (rec != null) Game.upgradeCost(e, lv) else null
+            if (cost != null) {
+                ChunkyButton("Lv ${lv + 1} · $cost◆", small = true, enabled = s.shards >= cost) { model.upgradeCard(e.k) }
+                Spacer(Modifier.width(8.dp))
+            }
             ChunkyButton("Open", kind = Btn.Primary, small = true) { model.fx.click(); model.open(Sheet.Card(e.k)) }
         }
     }

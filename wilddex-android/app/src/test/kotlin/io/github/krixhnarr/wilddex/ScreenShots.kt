@@ -60,6 +60,7 @@ class ScreenShots {
     @Test fun ops() = shot("ops") { tab = Tab.Ops }
     @Test fun profile() = shot("profile") { tab = Tab.Id }
     @Test fun cardSheet() = shot("card-sheet") { open(Sheet.Card("red-fox")) }
+    @Test fun cardStats() = shot("card-stats") { open(Sheet.Card("dog")) }
     @Test fun intro() = shot("intro") { open(Sheet.Intro) }
     @Test fun scan() = shot("scan") { tab = Tab.Scan }
     @Test fun revealNew() = shot("reveal-new") {

@@ -64,6 +64,11 @@ Everything that's done, in progress, and still to do. ✅ done · 🔧 in progre
 - ✅ Quantised int8 model (15 MB)
 
 ## 4. Game features
+- ✅ Card levels are bought with credits (◆) — re-scanning an animal no longer
+  levels it or pays anything, so it can't be farmed. Cost 20◆ × level × rarity
+  (Common ×1 … Legendary ×3); a Common to Lv 10 is 900◆
+- ⬜ Balance the credit economy with real play data (upgrade costs vs. income
+  from discoveries, orders, events and battles)
 - ⬜ Friends list and async PvP (battle a friend's squad from their code)
 - ⬜ Leaderboards (needs server-side checks so they can't be faked)
 - ⬜ More battle depth: status effects, card abilities, balance pass with real data

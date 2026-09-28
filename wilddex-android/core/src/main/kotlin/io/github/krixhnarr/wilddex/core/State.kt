@@ -21,6 +21,8 @@ data class CardRecord(
     var holo: Long? = null,
     var loc: List<Double>? = null,
     var lastLoc: List<Double>? = null,
+    /** Card level, raised only by spending credits (older saves: derived from sightings once). */
+    var level: Int? = null,
 )
 
 @Serializable
@@ -111,6 +113,8 @@ data class PlayerState(
     /** Older saves had no XP total: start them at what their cards were worth. */
     fun migrate() {
         if (xp == null) xp = ownedKeys().sumOf { Dex.rarity.getValue(Dex.byKey.getValue(it).r).value }
+        // levels used to come from re-scans; keep whatever level a card had reached
+        for (rec in caught.values) if (rec.level == null) rec.level = Game.levelFor(rec.count)
     }
 
     fun xpNow(): Int = xp ?: 0

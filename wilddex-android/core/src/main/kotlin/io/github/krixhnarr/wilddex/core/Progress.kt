@@ -58,8 +58,8 @@ object Progress {
     fun register(state: PlayerState, e: Entry, form: Int, grade: Game.Grade?, rnd: () -> Double = { Math.random() }): CaptureResult {
         val now = Clock.now()
         val isNew = !state.caught.containsKey(e.k)
-        val rec = state.caught[e.k] ?: CardRecord(first = now)
-        val lvBefore = if (isNew) 0 else Game.levelFor(rec.count)
+        val rec = state.caught[e.k] ?: CardRecord(first = now, level = 1)
+        val lv = Game.cardLevel(rec)
         val newForm = e.c.size > 1 && !rec.forms.contains(form)
         if (!rec.forms.contains(form)) rec.forms += form
         rec.count++
@@ -67,13 +67,14 @@ object Progress {
         if (isNew) rec.photo = true
         state.caught[e.k] = rec
         state.intel.remove(e.k)
-        val lvAfter = Game.levelFor(rec.count)
 
+        // Credits and XP come from discoveries and tasks, never from re-scanning
+        // the same animal (that would be farmable). Re-scans still log a sighting,
+        // can roll a holo, and count for the streak and daily orders.
         val gains = mutableListOf<Gain>()
         var credits = 0
         val value = Dex.rarity.getValue(e.r).value
-        if (isNew) { credits += value; gains += Gain("+$value◆ new card", true) } else { credits += 3; gains += Gain("+3◆ sighting") }
-        if (!isNew && lvAfter > lvBefore) { credits += 10; gains += Gain("LV $lvBefore → $lvAfter · +10◆", true) }
+        if (isNew) { credits += value; gains += Gain("+$value◆ new card", true) } else gains += Gain("sighting ×${rec.count} logged")
         if (newForm && !isNew) gains += Gain("new form: ${title(Dex.labels[form])}", true)
         val streak = Game.touchStreak(state)
         if (streak.bonus > 0) { credits += streak.bonus; gains += Gain("day ${streak.days} streak +${streak.bonus}◆") }
@@ -84,27 +85,41 @@ object Progress {
         val setDone = isNew && Dex.setOf(e).keys.all { state.caught.containsKey(it) }
         if (setDone) { credits += 50; gains += Gain("sector complete +50◆", true) }
         if (grade != null) {
-            credits += grade.credits
-            if (grade.credits > 0) gains += Gain("sync ${grade.grade} +${grade.credits}◆", grade.grade == "S")
+            if (isNew) {
+                credits += grade.credits
+                if (grade.credits > 0) gains += Gain("sync ${grade.grade} +${grade.credits}◆", grade.grade == "S")
+            }
             val order = "SABC"
             val best = state.bestGrade
             if (best == null || order.indexOf(grade.grade) < order.indexOf(best)) state.bestGrade = grade.grade
         }
         // Holo roll: a rare foil variant of this card.
         var holoNew = false
-        if (rnd() < Game.holoChance(grade?.grade)) {
-            if (rec.holo == null) { rec.holo = now; holoNew = true; gains.add(0, Gain("✦ holo variant", true, holo = true)) } else {
-                credits += Game.HOLO_DUPE_CREDITS; gains += Gain("holo echo +${Game.HOLO_DUPE_CREDITS}◆", true)
-            }
+        if (rec.holo == null && rnd() < Game.holoChance(grade?.grade)) {
+            rec.holo = now; holoNew = true; gains.add(0, Gain("✦ holo variant", true, holo = true))
         }
         state.shards += credits
         val xpBefore = state.xpNow()
-        val xpGain = (if (isNew) value else Game.SIGHTING_XP) + (grade?.xp ?: 0) + (if (holoNew) 25 else 0)
+        val xpGain = if (isNew) value + (grade?.xp ?: 0) + (if (holoNew) 25 else 0) else (if (holoNew) 25 else 0)
         val ups = earnXP(state, xpGain)
         return CaptureResult(
-            e, form, isNew, rec.count, lvBefore, lvAfter, newForm, credits, xpBefore, state.xpNow(), xpGain,
+            e, form, isNew, rec.count, lv, lv, newForm, credits, xpBefore, state.xpNow(), xpGain,
             grade, holoNew, gains, missionsDone, eventDone, setDone, ups,
         )
+    }
+
+    data class Upgrade(val entry: Entry, val before: Int, val after: Int, val cost: Int)
+
+    /** Spends credits to raise a card one level. Null when not owned, at max level, or short of credits. */
+    fun upgradeCard(state: PlayerState, key: String): Upgrade? {
+        val e = Dex.byKey[key] ?: return null
+        val rec = state.caught[key] ?: return null
+        val lv = Game.cardLevel(rec)
+        val cost = Game.upgradeCost(e, lv) ?: return null
+        if (state.shards < cost) return null
+        state.shards -= cost
+        rec.level = lv + 1
+        return Upgrade(e, lv, lv + 1, cost)
     }
 
     data class Claim(val credits: Int, val xp: Int, val levelUps: List<LevelUp>)

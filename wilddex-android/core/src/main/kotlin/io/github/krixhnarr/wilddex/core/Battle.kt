@@ -156,7 +156,7 @@ object Battle {
     }
 
     // ---------------------------------------------------------------- squads & opponents
-    private fun lvOf(state: PlayerState, k: String) = Game.levelFor(state.caught.getValue(k).count)
+    private fun lvOf(state: PlayerState, k: String) = Game.cardLevel(state.caught.getValue(k))
     fun pwrOf(state: PlayerState, k: String): Double =
         Game.statsFor(Dex.byKey.getValue(k), lvOf(state, k)).pwr * (if (state.caught.getValue(k).holo != null) 1.1 else 1.0)
 

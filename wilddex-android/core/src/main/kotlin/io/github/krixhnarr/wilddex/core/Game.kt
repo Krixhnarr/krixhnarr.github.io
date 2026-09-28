@@ -28,9 +28,16 @@ object Game {
     const val DECRYPT_COST = 40
     const val MAX_LEVEL = 10
 
-    // ---- card level: sightings 1,2,4,8,16... -> Lv 1,2,3,4,5 ... max 10
+    // ---- card level: raised by spending credits, Lv 1..10
+    /** The old rule (sightings 1,2,4,8… → Lv 1,2,3,4…), used once to carry over levels from older saves. */
     fun levelFor(count: Int): Int = min(MAX_LEVEL, 1 + (31 - Integer.numberOfLeadingZeros(max(1, count))))
-    fun nextLevelAt(level: Int): Int? = if (level >= MAX_LEVEL) null else 1 shl level
+
+    fun cardLevel(rec: CardRecord): Int = (rec.level ?: levelFor(rec.count)).coerceIn(1, MAX_LEVEL)
+
+    private val UPGRADE_RARITY = mapOf(1 to 1.0, 2 to 1.5, 3 to 2.0, 4 to 3.0)
+    /** Credits to raise a card from [level] to level + 1 (null at max). Common: 20, 40 … 180; 900 for Lv 1→10. */
+    fun upgradeCost(e: Entry, level: Int): Int? =
+        if (level >= MAX_LEVEL) null else (20 * level * UPGRADE_RARITY.getValue(e.r) / 5).roundToInt() * 5
 
     // ---- stats
     private val BASE = mapOf(1 to 34, 2 to 44, 3 to 54, 4 to 68)
@@ -79,7 +86,6 @@ object Game {
     fun levelForXP(xp: Int): Int = 1 + floor(sqrt(max(0, xp) / 20.0)).toInt()
     fun xpForLevel(level: Int): Int = 20 * (level - 1) * (level - 1)
     fun levelUpCredits(level: Int): Int = 10 * level
-    const val SIGHTING_XP = 5
     const val MISSION_XP = 10
     const val EVENT_XP = 40
 
@@ -124,7 +130,6 @@ object Game {
     // ---- holo (shiny) variants: rare foil pulls, better odds on a perfect sync
     const val HOLO_ODDS = 40
     fun holoChance(grade: String?): Double = (if (grade == "S") 2.0 else 1.0) / HOLO_ODDS
-    const val HOLO_DUPE_CREDITS = 30
 
     /** Card stars: half a star per level, five stars at Lv 10. Each value is 0, 50 or 100 (% filled). */
     fun stars(level: Int): List<Int> = (0 until 5).map { i -> max(0, min(2, level - i * 2)) * 50 }
@@ -291,7 +296,7 @@ object Game {
         val caught = state.ownedKeys()
         val byType = mutableMapOf<String, Int>()
         for (k in caught) for (t in Dex.affinity.getValue(k)) byType[t] = (byType[t] ?: 0) + 1
-        val maxLevel = caught.maxOfOrNull { levelFor(state.caught.getValue(it).count) } ?: 0
+        val maxLevel = caught.maxOfOrNull { cardLevel(state.caught.getValue(it)) } ?: 0
         val list = listOf(
             Badge("first", "First Contact", "Register your first animal", caught.isNotEmpty()),
             Badge("ten", "Field Agent", "Register 10 species", caught.size >= 10),
