@@ -92,6 +92,7 @@ class ScanController(private val model: GameModel, private val context: Context)
         if (latest.get() == null) { say("camera not ready", Kind.Err); return }
         frozen = null
         phase = Phase.Sweeping
+        fx.duck(true)
         try {
             say("> wilddex.scan --live", Kind.Cmd)
             say("[..] lock-on sweep · slide phone left, then right")
@@ -144,6 +145,7 @@ class ScanController(private val model: GameModel, private val context: Context)
             say("scan aborted · please retry", Kind.Err)
             frozen = null
         } finally {
+            fx.duck(false)
             locked = false
             progress = 0f
             phase = Phase.Idle

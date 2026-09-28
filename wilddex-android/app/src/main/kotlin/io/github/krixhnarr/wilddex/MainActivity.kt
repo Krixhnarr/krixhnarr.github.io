@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.lifecycleScope
+import io.github.krixhnarr.wilddex.audio.GameFx
 import io.github.krixhnarr.wilddex.core.Game
 import io.github.krixhnarr.wilddex.core.PlayerState
 import io.github.krixhnarr.wilddex.data.SaveStore
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var model: GameModel
+    private lateinit var fx: GameFx
 
     private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@registerForActivityResult
@@ -72,6 +74,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         model = GameModel(SaveStore(applicationContext))
+        fx = GameFx(applicationContext) { model.state.settings }
+        model.fx = fx
         model.exportBackup = { exportLauncher.launch("wilddex-backup-${Game.today()}.json") }
         model.importBackup = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
         model.tagLocation = ::tagLocation
@@ -82,9 +86,14 @@ class MainActivity : ComponentActivity() {
             } else locationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
         model.applySky()
+        fx.sound.setScene(if (model.night) "night" else "day")
         if (!model.state.onboarded) model.open(Sheet.Intro)
         // re-check day/night every minute
         lifecycleScope.launch { while (true) { delay(60_000); model.applySky() } }
         setContent { WildDexRoot(model) }
     }
+
+    override fun onStart() { super.onStart(); fx.sound.resume() }
+    override fun onStop() { super.onStop(); fx.sound.pause(); fx.stopSpeaking() }
+    override fun onDestroy() { super.onDestroy(); if (isFinishing) fx.shutdown() }
 }

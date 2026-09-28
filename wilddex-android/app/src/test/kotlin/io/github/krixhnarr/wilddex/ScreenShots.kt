@@ -74,5 +74,9 @@ class ScreenShots {
         val d = io.github.krixhnarr.wilddex.core.Dex.byKey
         open(Sheet.Choices(listOf("grey-wolf", "dog", "red-fox").mapNotNull { d[it] }.mapIndexed { i, e -> io.github.krixhnarr.wilddex.core.Recognition.Candidate(e, 0.3 - i * 0.08, e.c[0]) }, "Signal inconclusive — pick the right animal, or rescan closer and in better light."))
     }
+    @Test fun arena() = shot("arena") { tab = Tab.Arena }
+    @Test fun fight() = shot("fight") { open(Sheet.Fight("rival")) }
+    @Test fun squad() = shot("squad") { open(Sheet.Squad(0)) }
+    @Test fun crate() = shot("crate") { open(Sheet.Crate(true)) }
     @Test fun levelUp() = shot("levelup") { queueLevelUps(listOf(io.github.krixhnarr.wilddex.core.LevelUp(5, 50))) }
 }

@@ -313,7 +313,7 @@ private fun LevelUpHost(model: GameModel) {
     val show = up != null && model.sheet !is Sheet.Reveal
     AnimatedVisibility(show, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
         val cur = up ?: return@AnimatedVisibility
-        LaunchedEffect(cur) { model.fx.reveal(3); model.fx.buzz(40, 50, 40, 50, 160); model.confetti++ }
+        LaunchedEffect(cur) { model.fx.levelUp(); model.fx.buzz(40, 50, 40, 50, 160); model.confetti++ }
         Box(
             Modifier.fillMaxSize().background(Color(0xB30A1428)).clickable(remember { MutableInteractionSource() }, null) {
                 model.levelUps.removeAt(0)

@@ -56,6 +56,16 @@ interface Fx {
     fun charge() {}
     fun holo() {}
     fun grade(g: String) {}
+    fun guardSfx() {}
+    fun hit(mult: Double) {}
+    fun faint() {}
+    fun overdrive() {}
+    /** Music: "day", "night" or "battle". */
+    fun scene(name: String) {}
+    fun stinger(win: Boolean) {}
+    fun duck(on: Boolean) {}
+    fun levelUp() {}
+    fun settingsChanged() {}
     fun speak(text: String) {}
     fun stopSpeaking() {}
     object Silent : Fx
@@ -90,6 +100,7 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
 
     fun commit(save: Boolean = true) {
         rev++
+        fx.settingsChanged()
         if (save) store?.save(state)
     }
 
@@ -109,7 +120,9 @@ class GameModel(private val store: SaveStore?, initial: PlayerState? = null, var
     fun applySky() {
         val mode = state.settings.theme
         val h = Clock.hour()
+        val was = night
         night = mode == "night" || (mode == "auto" && (h >= 19 || h < 6))
+        if (was != night && sheet !is Sheet.Fight) fx.scene(if (night) "night" else "day")
     }
 
     // helpers used across screens

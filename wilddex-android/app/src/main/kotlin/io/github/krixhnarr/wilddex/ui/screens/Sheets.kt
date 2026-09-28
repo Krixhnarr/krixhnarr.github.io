@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -80,7 +81,7 @@ fun SheetContent(model: GameModel, sheet: Sheet) {
         is Sheet.Reveal -> RevealSheet(model, sheet)
         is Sheet.Choices -> ChoicesSheet(model, sheet.options, sheet.text)
         is Sheet.Squad -> SquadSheet(model, sheet.slot)
-        is Sheet.Fight -> FightSheet(model, sheet.kind)
+        is Sheet.Fight -> FightSheet(model, sheet)
     }
 }
 
@@ -121,12 +122,31 @@ fun TiltCard(model: GameModel, e: Entry, width: Int = 210) {
     val ry = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val tc = typeColor(e)
+    // lean with the phone (Card tilt setting): gravity relative to how it was held at first
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var gx by remember { mutableStateOf(0f) }
+    var gy by remember { mutableStateOf(0f) }
+    if (s.settings.tilt) androidx.compose.runtime.DisposableEffect(Unit) {
+        val sm = ctx.getSystemService(android.content.Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+        val sensor = sm?.getDefaultSensor(android.hardware.Sensor.TYPE_GRAVITY) ?: sm?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+        var base: FloatArray? = null
+        val l = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(ev: android.hardware.SensorEvent) {
+                val b = base ?: ev.values.copyOf().also { base = it }
+                gx += (((ev.values[0] - b[0]) * -3.2f).coerceIn(-18f, 18f) - gx) * 0.2f
+                gy += (((ev.values[1] - b[1]) * 3.2f).coerceIn(-15f, 15f) - gy) * 0.2f
+            }
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+        }
+        if (sensor != null) sm?.registerListener(l, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+        onDispose { sm?.unregisterListener(l) }
+    }
     Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size((width * 1.25f).dp).background(Brush.radialGradient(listOf(tc.copy(alpha = 0.35f), Color.Transparent))))
         CardView(
             e, s.caught[e.k], intel = s.intel[e.k] == true, frame = model.frame(),
             modifier = Modifier.width(width.dp)
-                .graphicsLayer { rotationX = rx.value; rotationY = ry.value; cameraDistance = 14f * density }
+                .graphicsLayer { rotationX = rx.value + gy; rotationY = ry.value + gx; cameraDistance = 14f * density }
                 .pointerInput(e.k) {
                     detectDragGestures(
                         onDragEnd = { scope.launch { rx.animateTo(0f, spring(0.35f, Spring.StiffnessLow)) }; scope.launch { ry.animateTo(0f, spring(0.35f, Spring.StiffnessLow)) } },

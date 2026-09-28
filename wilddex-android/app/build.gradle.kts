@@ -18,8 +18,22 @@ android {
         versionName = "0.1.0"
     }
 
+    // A shared debug key kept in the repo, so every build installs as an update
+    // of the last one. Before publishing on Google Play, sign release builds
+    // with a private upload key instead (see ROADMAP.md).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("debug")
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
