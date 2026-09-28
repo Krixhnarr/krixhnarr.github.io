@@ -1,7 +1,7 @@
 // Offline support. The app shell is refreshed in the background
 // (stale-while-revalidate); the ~15 MB model, TF.js bundle, 3D art and fonts are cached on
 // first use and served from cache afterwards. Scope is /wilddex/ only.
-const VERSION = 'wilddex-v16';
+const VERSION = 'wilddex-v17';
 const SHELL = [
   './',
   'index.html',
@@ -13,6 +13,8 @@ const SHELL = [
   'js/loot.js',
   'js/music.js',
   'js/fx.js',
+  'js/account.js',
+  'js/firebase-config.js',
   'js/liveness.js',
   'js/parallax.js',
   'js/dotmatrix.js',
