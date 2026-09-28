@@ -268,12 +268,10 @@ private fun Hud(ctl: ScanController) {
             "LENS:${if (ctl.front) "FRONT" else "REAR"}", style = mono(10.sp, HUD.copy(alpha = 0.8f), FontWeight.Bold, 0.1f),
             modifier = Modifier.align(Alignment.BottomStart).padding(18.dp),
         )
-        // lock-on ring: drifts the way the phone should move and fills as sync builds
+        // lock-on ring: fills as sync builds while the player holds steady
         AnimatedVisibility(sweeping || ctl.locked, Modifier.align(Alignment.Center), enter = fadeIn() + scaleIn(initialScale = 1.3f), exit = fadeOut()) {
             val p = ctl.progress
-            val lx = if (p < 0.5f) -p * 2 else -1 + (p - 0.5f) * 4
-            val drift by animateFloatAsState(lx, spring(), label = "lx")
-            Box(Modifier.size(210.dp).graphicsLayer { translationX = drift * 0.12f * size.width * 1.6f }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(210.dp), contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize().rotate(spin)) {
                     val u = size.minDimension / 100f
                     drawCircle(HUD.copy(alpha = 0.5f), 36 * u, style = Stroke(1.2f * u, pathEffect = PathEffect.dashPathEffect(floatArrayOf(1f * u, 3f * u))))
@@ -297,19 +295,14 @@ private fun Hud(ctl: ScanController) {
         }
         AnimatedVisibility(sweeping, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp), enter = fadeIn(), exit = fadeOut()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val left = ctl.progress < 0.5f
                 Text(
-                    if (left) "◀◀◀  Move phone left" else "Now move right  ▶▶▶",
+                    "Hold steady…",
                     style = display(15.sp, Color.White),
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 6.dp),
                 )
                 Box(Modifier.padding(top = 8.dp).width(180.dp).height(6.dp).clip(CircleShape).background(Color(0x55FFFFFF))) {
                     Box(Modifier.fillMaxWidth(ctl.progress).height(6.dp).background(Color(0xFFFFC83D)))
                 }
-                Text(
-                    "slide it sideways · don't turn it", style = mono(11.sp, Color.White, FontWeight.Bold),
-                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0x66000000)).padding(horizontal = 8.dp, vertical = 2.dp),
-                )
             }
         }
     }

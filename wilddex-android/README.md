@@ -25,13 +25,25 @@ says the game moved, and lets old players download their progress).
 
 ## Real animals only
 
-Each scan records a ~1.9 s sweep (20 frames) while the player slides the
-phone left, then right. Tracked points on a flat surface all move by one
-homography; a real scene shows parallax that follows the player's hand. So
-photos, prints and screens (flat) and videos on screens (motion that ignores
-the hand) are rejected. On top of that, MobileNet v2 checks for screens,
-monitors, books and packets in the aimed square and in the whole frame, and
-a detector looks for a device bezel or print margin around the picture.
+Scanning is point-and-hold: the player holds the phone on the animal for
+~1.5 s, so it works for pets and for a zoo elephant 20 m away. Before a card
+is registered the scan must pass the live check:
+
+- **Devices & print:** MobileNet v2 looks for screens, monitors, phones,
+  books and packets, both in the aimed square and in the whole frame.
+- **Bezels & borders:** `FrameDetect.kt` looks for a device bezel or a
+  paper margin around the picture.
+- **Display pixels:** `ScreenDetect.kt` looks at the centre of the frame at
+  full camera resolution for a display's pixel grid or moiré — a few very
+  sharp peaks in the frequency spectrum that fur, feathers and skin don't have.
+
+`Parallax.kt` still tracks points through the hold; when the hand's natural
+wobble shows real depth, the scan earns a better sync grade (S needs it).
+
+Limits: this catches screens and prints rather than proving 3D, so a
+carefully made print or a screen seen from far away can sometimes pass;
+tune the thresholds with real-phone reports (the scanner log prints the
+numbers behind every decision).
 
 Recognition runs on the phone (`app/src/main/assets/mobilenet_v2.tflite`,
 full + mirrored + centre-crop views averaged). Nothing is uploaded.
@@ -41,7 +53,7 @@ full + mirrored + centre-crop views averaged). Nothing is uploaded.
 Needs JDK 17+ and the Android SDK (compileSdk 36).
 
 ```sh
-./gradlew :core:test                 # game-rule parity + backup tests
+./gradlew :core:test                 # game rules, live-check and backup tests
 ./gradlew :app:testDebugUnitTest     # Robolectric screenshots + synth test
 ./gradlew :app:assembleRelease       # app/build/outputs/apk/release/app-release.apk
 ```

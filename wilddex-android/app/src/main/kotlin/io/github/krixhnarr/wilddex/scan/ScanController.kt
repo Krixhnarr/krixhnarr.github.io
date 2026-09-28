@@ -20,6 +20,7 @@ import io.github.krixhnarr.wilddex.core.Game
 import io.github.krixhnarr.wilddex.core.GrayFrame
 import io.github.krixhnarr.wilddex.core.Parallax
 import io.github.krixhnarr.wilddex.core.Recognition
+import io.github.krixhnarr.wilddex.core.ScreenDetect
 import io.github.krixhnarr.wilddex.core.SweepResult
 import io.github.krixhnarr.wilddex.core.Verdict
 import kotlinx.coroutines.Dispatchers
@@ -28,9 +29,11 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Runs a scan: a lock-on sweep that records frames while the player slides
- * the phone, then recognition and the live-animal checks. Only a real, live,
- * 3D animal is registered — prints, photos, screens and videos are rejected.
+ * Runs a scan: the player holds the phone on the animal for ~1.5 s while
+ * frames are recorded, then recognition and the live-animal checks. Screens
+ * (device classes, bezels, display pixel grid) and prints (paper borders,
+ * book/packet classes) are rejected. Depth from the hand's natural wobble,
+ * when it shows, earns a better grade.
  */
 class ScanController(private val model: GameModel, private val context: Context) {
     enum class Phase { Idle, Sweeping, Analyzing }
@@ -50,7 +53,7 @@ class ScanController(private val model: GameModel, private val context: Context)
 
     private val latest = AtomicReference<Bitmap?>(null)
     private var lastGrab = 0L
-    /** Counts camera frames, so the sweep never records the same frame twice. */
+    /** Counts camera frames, so the scan never records the same frame twice. */
     @Volatile private var seq = 0L
 
     fun say(text: String, kind: Kind = Kind.Info) {
@@ -58,7 +61,7 @@ class ScanController(private val model: GameModel, private val context: Context)
         while (log.size > 6) log.removeAt(0)
     }
 
-    fun idle() = say("Ready · point at a real animal, then move the phone sideways")
+    fun idle() = say("Ready · point at a real animal and hold steady")
 
     /** Called from the camera analyzer thread for every frame. */
     fun onFrame(img: ImageProxy) {
@@ -80,9 +83,9 @@ class ScanController(private val model: GameModel, private val context: Context)
     }
 
     /**
-     * Holds exposure and white balance still during the sweep, so the frames
+     * Holds exposure and white balance still during the scan, so the frames
      * stay comparable while the phone moves (auto-exposure otherwise keeps
-     * changing the brightness mid-sweep).
+     * changing the brightness mid-scan).
      */
     @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
     private fun lockExposure(on: Boolean) {
@@ -119,9 +122,10 @@ class ScanController(private val model: GameModel, private val context: Context)
         fx.duck(true)
         try {
             say("> wilddex.scan --live", Kind.Cmd)
-            say("[..] lock-on sweep · move the phone sideways: left, then right")
-            // 1) record ~1.9 s while the player slides the phone
+            say("[..] lock-on · hold steady")
+            // 1) record ~1.5 s while the player holds the phone on the animal
             val frames = ArrayList<GrayFrame>(SWEEP_FRAMES)
+            var midShot: Bitmap? = null
             var quarter = 0
             var used = -1L
             lockExposure(true)
@@ -132,6 +136,7 @@ class ScanController(private val model: GameModel, private val context: Context)
                 while (seq == used && System.currentTimeMillis() < waitUntil) delay(5)
                 used = seq
                 val f = latest.get() ?: return
+                if (i == SWEEP_FRAMES / 2) midShot = f
                 frames += withContext(Dispatchers.Default) { Frames.gray(f) }
                 progress = (i + 1f) / SWEEP_FRAMES
                 if (i % 3 == 0) fx.tick(progress)
@@ -158,18 +163,20 @@ class ScanController(private val model: GameModel, private val context: Context)
                 val probs = classifier.classify(square)
                 val v = Recognition.interpret(probs)
                 if (v.kind == Recognition.Kind.MATCH || v.kind == Recognition.Kind.UNSURE) {
-                    // 3) only a real, live, 3D animal counts
-                    val depth = Parallax.analyse(frames)
+                    // 3) only a real animal counts: look for screens and prints
                     val spoof = Recognition.spoofCheck(probs, classifier.classify(Frames.letterbox(shot)))
                     val frame = Frames.detectFrame(shot)
+                    val grid = listOfNotNull(shot, midShot).map { ScreenDetect.detect(Frames.screenCrop(it)) }.maxBy { it.ratio }
+                    // depth from the hand's natural wobble is a bonus, not a requirement
+                    val depth = Parallax.analyse(frames)
+                    val steady = Frames.steadiness(frames)
                     when {
-                        spoof.blocked || frame.found -> Outcome.Spoof(spoof, frame)
-                        depth.verdict != Verdict.LIVE -> Outcome.Depth(depth)
-                        else -> Outcome.Animal(v, Game.syncGrade(v.top.score, depth))
+                        spoof.blocked || frame.found || grid.found -> Outcome.Spoof(spoof, frame, grid)
+                        else -> Outcome.Animal(v, Game.holdGrade(v.top.score, steady, depth.verdict == Verdict.LIVE), depth, steady)
                     }
                 } else Outcome.Plain(v)
             }
-            if (outcome !is Outcome.Plain) say("[..] liveness · depth, screen & print checks")
+            if (outcome !is Outcome.Plain) say("[..] live check · screen, print & device checks")
             val wait = 1200 - (System.currentTimeMillis() - started)
             if (wait > 0) delay(wait)
             model.update { scans++ }
@@ -188,9 +195,8 @@ class ScanController(private val model: GameModel, private val context: Context)
     }
 
     private sealed interface Outcome {
-        data class Animal(val v: Recognition.Verdict, val grade: Game.Grade) : Outcome
-        data class Spoof(val spoof: Recognition.Spoof, val frame: FrameDetect.Hit) : Outcome
-        data class Depth(val depth: SweepResult) : Outcome
+        data class Animal(val v: Recognition.Verdict, val grade: Game.Grade, val depth: SweepResult, val steady: Double) : Outcome
+        data class Spoof(val spoof: Recognition.Spoof, val frame: FrameDetect.Hit, val grid: ScreenDetect.Result) : Outcome
         data class Plain(val v: Recognition.Verdict) : Outcome
     }
 
@@ -203,6 +209,8 @@ class ScanController(private val model: GameModel, private val context: Context)
             is Outcome.Animal -> {
                 val v = o.v
                 model.pending = GameModel.PendingScan(o.grade, Bitmap.createScaledBitmap(square, 360, 360, true))
+                val d = o.depth
+                say("live ✓ · steady ${(o.steady * 100).toInt()}% · depth ${if (d.verdict == Verdict.LIVE) "seen (${d.parallax} pts)" else "not seen"}", Kind.Ok)
                 if (v.kind == Recognition.Kind.MATCH) {
                     say("match ${snake(v.top.entry.s)} · conf=${conf(v.top.score)}", Kind.Ok)
                     model.register(v.top.entry, v.top.form, v.alternatives)
@@ -214,36 +222,14 @@ class ScanController(private val model: GameModel, private val context: Context)
                 frozen = null
                 idle()
             }
-            is Outcome.Depth -> {
-                val d = o.depth
-                when (d.verdict) {
-                    Verdict.FLAT -> {
-                        fx.fail()
-                        say("no depth seen · looks flat · ${d.parallax}/${d.tracks} depth points", Kind.Err)
-                        say("photos, prints & screens can't be registered · real animals: move the phone sideways, don't turn it", Kind.Warn)
-                        model.say("NO 3D DEPTH SEEN · MOVE THE PHONE SIDEWAYS, DON'T TURN IT")
-                    }
-                    Verdict.VIDEO -> {
-                        fx.fail()
-                        say("movement but no depth · ${d.indep} moving / ${d.parallax} depth points of ${d.tracks}", Kind.Err)
-                        say("videos can't be registered · real animals: move the phone a hand's width sideways, don't turn it", Kind.Warn)
-                        model.say("NOT ENOUGH DEPTH · MOVE THE PHONE FURTHER SIDEWAYS")
-                    }
-                    Verdict.STILL -> { fx.again(); say("no depth signal · slide the phone left, then right, while scanning", Kind.Warn); model.say("MOVE YOUR PHONE SIDEWAYS: LEFT, THEN RIGHT") }
-                    Verdict.ONEWAY -> { fx.again(); say("one-way motion · slide left AND back right to verify depth", Kind.Warn); model.say("SLIDE LEFT, THEN BACK RIGHT") }
-                    else -> {
-                        fx.again()
-                        say("could only follow ${d.tracks}/${Parallax.MIN_TRACKS} detail points · fill the ring with the animal, slide slowly", Kind.Warn)
-                        model.say("CAN'T VERIFY · GET CLOSER, SLIDE SLOWLY")
-                    }
-                }
-                delay(2200); frozen = null; idle()
-            }
             is Outcome.Spoof -> {
                 fx.fail()
                 say(
-                    if (o.spoof.blocked) "liveness failed · ${snake(Dex.labels[o.spoof.label])} · conf=${conf(o.spoof.score)}"
-                    else "liveness failed · display_or_print_frame detected", Kind.Err,
+                    when {
+                        o.spoof.blocked -> "live check failed · ${snake(Dex.labels[o.spoof.label])} · conf=${conf(o.spoof.score)}"
+                        o.grid.found -> "live check failed · display pixel grid · sharpness=${o.grid.ratio.toInt()}"
+                        else -> "live check failed · display_or_print_frame detected"
+                    }, Kind.Err,
                 )
                 say("screens & prints can't be registered", Kind.Err)
                 model.say("SCREEN OR PRINT DETECTED · SCAN A REAL ANIMAL")
@@ -259,7 +245,7 @@ class ScanController(private val model: GameModel, private val context: Context)
     }
 
     companion object {
-        const val SWEEP_FRAMES = 20
-        const val SWEEP_INTERVAL = 95L
+        const val SWEEP_FRAMES = 15 // ~1.5 s hold
+        const val SWEEP_INTERVAL = 100L
     }
 }

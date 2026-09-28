@@ -115,6 +115,34 @@ object Frames {
         return GrayFrame(g, b.width, b.height)
     }
 
+    /** The centre [ScreenDetect.SIZE]² of the frame at native resolution, as grayscale, for the screen-grid check. */
+    fun screenCrop(src: Bitmap): FloatArray {
+        val n = io.github.krixhnarr.wilddex.core.ScreenDetect.SIZE
+        val sz = minOf(n, src.width, src.height)
+        val px = IntArray(sz * sz)
+        src.getPixels(px, 0, sz, (src.width - sz) / 2, (src.height - sz) / 2, sz, sz)
+        val out = FloatArray(n * n) { 128f }
+        for (y in 0 until sz) for (x in 0 until sz) {
+            val p = px[y * sz + x]
+            out[y * n + x] = 0.299f * ((p shr 16) and 255) + 0.587f * ((p shr 8) and 255) + 0.114f * (p and 255)
+        }
+        return out
+    }
+
+    /** How steady the phone was: 1 = rock still, 0 = shaking (mean change between frames). */
+    fun steadiness(frames: List<GrayFrame>): Double {
+        if (frames.size < 2) return 1.0
+        var sum = 0.0; var n = 0
+        for (i in 1 until frames.size) {
+            val a = frames[i - 1].g; val b = frames[i].g
+            var d = 0.0
+            var k = 0
+            while (k < a.size) { d += kotlin.math.abs(a[k] - b[k]); k += 7 }
+            sum += d / (a.size / 7); n++
+        }
+        return (1 - (sum / n) / 25.0).coerceIn(0.0, 1.0)
+    }
+
     /** Luminance at long side 320 for the bezel / print-margin detector. */
     fun detectFrame(src: Bitmap): FrameDetect.Hit {
         val b = scaled(src, FrameDetect.N)

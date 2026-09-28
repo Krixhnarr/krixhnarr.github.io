@@ -108,6 +108,19 @@ object Game {
         return Grade(g, (q * 100).roundToInt() / 100.0, credits, xp, name)
     }
 
+    /**
+     * Sync grade for a hold-steady scan: recognition confidence, how steady the
+     * phone was (0..1), and whether real depth showed up from the natural wobble
+     * of the hand (needed for an S).
+     */
+    fun holdGrade(conf: Double, steady: Double, depthSeen: Boolean): Grade {
+        val c = min(1.0, conf / 0.8)
+        val q = 0.5 * c + 0.3 * steady.coerceIn(0.0, 1.0) + (if (depthSeen) 0.2 else 0.0)
+        val g = when { q >= 0.85 -> "S"; q >= 0.7 -> "A"; q >= 0.5 -> "B"; else -> "C" }
+        val (credits, xp, name) = GRADES.getValue(g)
+        return Grade(g, (q * 100).roundToInt() / 100.0, credits, xp, name)
+    }
+
     // ---- holo (shiny) variants: rare foil pulls, better odds on a perfect sync
     const val HOLO_ODDS = 40
     fun holoChance(grade: String?): Double = (if (grade == "S") 2.0 else 1.0) / HOLO_ODDS
