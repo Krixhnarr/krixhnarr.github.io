@@ -53,9 +53,10 @@ import io.github.krixhnarr.wilddex.core.Progress
 import io.github.krixhnarr.wilddex.core.nextRank
 import io.github.krixhnarr.wilddex.core.rankFor
 import io.github.krixhnarr.wilddex.live
+import io.github.krixhnarr.wilddex.ui.Block
 import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.CardShape
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
+import io.github.krixhnarr.wilddex.ui.PillButton
 import io.github.krixhnarr.wilddex.ui.HelpButton
 import io.github.krixhnarr.wilddex.ui.Icon
 import io.github.krixhnarr.wilddex.ui.LineIcon
@@ -64,9 +65,13 @@ import io.github.krixhnarr.wilddex.ui.Panel
 import io.github.krixhnarr.wilddex.ui.PanelHead
 import io.github.krixhnarr.wilddex.ui.Small
 import io.github.krixhnarr.wilddex.ui.display
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 
-fun tierColor(r: Int): Color = Loot.TIERS[r]?.let { Color(it.color) } ?: Color(0xFF8DA0B0)
+/** Loot tiers use the pastel blocks: Common cream, Rare mint, Epic lilac, Legendary lime. */
+fun tierColor(r: Int): Color = when (r) { 1 -> Color(0xFFF4ECD6); 2 -> Color(0xFFC8E6CD); 3 -> Color(0xFFC5B0F4); 4 -> Color(0xFFDCEEB1); else -> Color(0xFFE6E6E6) }
 
 @Composable
 fun ProfileScreen(model: GameModel) {
@@ -81,22 +86,22 @@ fun ProfileScreen(model: GameModel) {
 
         // ---- ID card
         Panel(Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Brush.horizontalGradient(listOf(c.accent, c.accentDeep))).padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text("OPERATOR", style = mono(11.sp, Color.White, FontWeight.Bold, 0.2f), modifier = Modifier.weight(1f))
-                Text("OP-${Progress.operatorId(s)}", style = mono(11.sp, Color.White, FontWeight.Bold))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Brush.horizontalGradient(listOf(c.ink, c.ink))).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text("OPERATOR", style = caption(11.sp, Color.White), modifier = Modifier.weight(1f))
+                Text("OP-${Progress.operatorId(s)}", style = label(13.sp, Color.White))
             }
-            Text("CALLSIGN", style = mono(10.sp, c.dim, FontWeight.Bold, 0.12f), modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+            Text("CALLSIGN", style = caption(10.sp, c.ink), modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
             var name by remember { mutableStateOf(s.name) }
             BasicTextField(
                 name, { v -> name = v.take(18); model.update { this.name = name.trim() } },
-                singleLine = true, textStyle = display(20.sp, c.hi), cursorBrush = SolidColor(c.accent),
+                singleLine = true, textStyle = headline(21.sp, c.ink), cursorBrush = SolidColor(c.ink),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surface2).border(1.dp, c.line2, RoundedCornerShape(12.dp)).padding(12.dp),
-                decorationBox = { inner -> if (name.isEmpty()) Text("Enter name", style = display(20.sp, c.dim2)); inner() },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.surfaceSoft).border(1.dp, c.hairline, RoundedCornerShape(12.dp)).padding(12.dp),
+                decorationBox = { inner -> if (name.isEmpty()) Text("Enter name", style = headline(21.sp, c.muted)); inner() },
             )
-            Text(Loot.titleName(s), style = mono(12.sp, c.accentDeep, FontWeight.Bold), modifier = Modifier.padding(top = 8.dp))
-            Text("Rank $rank · Lv ${Progress.opLevel(s)}", style = display(15.sp, c.hi), modifier = Modifier.padding(top = 4.dp))
-            Text(next?.let { "${it.first - n} more cards to ${it.second}" } ?: "Every card collected. Legendary.", style = mono(11.sp, c.dim))
+            Text(Loot.titleName(s), style = label(14.sp, c.ink), modifier = Modifier.padding(top = 8.dp))
+            Text("Rank $rank · Lv ${Progress.opLevel(s)}", style = headline(16.sp, c.ink), modifier = Modifier.padding(top = 4.dp))
+            Text(next?.let { "${it.first - n} more cards to ${it.second}" } ?: "Every card collected. Legendary.", style = body(13.sp, c.ink))
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 IdStat(Modifier.weight(1f), pad3(n), "Cards")
                 IdStat(Modifier.weight(1f), pad3(forms), "Forms")
@@ -104,7 +109,7 @@ fun ProfileScreen(model: GameModel) {
                 IdStat(Modifier.weight(1f), "${s.scans}", "Scans")
             }
             val byR = (1..4).map { r -> Dex.entries.filter { it.r == r }.let { all -> "${all.count { s.caught.containsKey(it.k) }}/${all.size}" } }
-            Text("Common ${byR[0]} · Uncommon ${byR[1]} · Rare ${byR[2]} · Legendary ${byR[3]}", style = mono(10.sp, c.dim), modifier = Modifier.padding(top = 10.dp))
+            Text("Common ${byR[0]} · Uncommon ${byR[1]} · Rare ${byR[2]} · Legendary ${byR[3]}", style = body(12.sp, c.ink), modifier = Modifier.padding(top = 10.dp))
         }
 
         SupplyPanel(model, s)
@@ -113,8 +118,8 @@ fun ProfileScreen(model: GameModel) {
         BackupPanel(model)
 
         Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
-            ChunkyButton("How to play", small = true) { model.fx.click(); model.open(Sheet.Intro) }
-            ChunkyButton("About", small = true) { model.fx.click(); model.open(Sheet.Help("about")) }
+            PillButton("How to play", small = true) { model.fx.click(); model.open(Sheet.Intro) }
+            PillButton("About", small = true) { model.fx.click(); model.open(Sheet.Help("about")) }
         }
     }
 }
@@ -122,9 +127,9 @@ fun ProfileScreen(model: GameModel) {
 @Composable
 private fun IdStat(modifier: Modifier, value: String, label: String) {
     val c = LocalWd.current
-    Column(modifier.clip(RoundedCornerShape(12.dp)).background(c.surface2).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = display(17.sp, c.hi))
-        Text(label.uppercase(), style = mono(9.sp, c.dim, FontWeight.Bold, 0.1f))
+    Column(modifier.clip(RoundedCornerShape(12.dp)).background(c.surfaceSoft).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = headline(18.sp, c.ink))
+        Text(label.uppercase(), style = caption(9.sp, c.ink))
     }
 }
 
@@ -133,21 +138,24 @@ private fun SupplyPanel(model: GameModel, s: PlayerState) {
     val c = LocalWd.current
     val l = s.locker()
     val canBuy = s.shards >= Loot.CRATE_COST
-    Panel(Modifier.fillMaxWidth().padding(top = 12.dp), tint = c.gold) {
-        PanelHead("Supply") { HelpButton { model.fx.click(); model.open(Sheet.Help("supply")) } }
+    Block(c.cream, Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Supply", style = headline(22.sp, c.blockInk), modifier = Modifier.weight(1f))
+            HelpButton { model.fx.click(); model.open(Sheet.Help("supply")) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
-                LineIcon(Icon.Crate, Modifier.size(52.dp), Color(0xFFB07F00), 1.8f)
+                LineIcon(Icon.Crate, Modifier.size(52.dp), c.blockInk, 1.6f)
                 if (l.crates > 0) Text(
-                    "${l.crates}", style = mono(11.sp, Color.White, FontWeight.Bold),
-                    modifier = Modifier.align(Alignment.TopEnd).clip(RoundedCornerShape(10.dp)).background(c.coral).padding(horizontal = 6.dp, vertical = 1.dp),
+                    "${l.crates}", style = label(13.sp, Color.White),
+                    modifier = Modifier.align(Alignment.TopEnd).clip(RoundedCornerShape(10.dp)).background(c.magenta).padding(horizontal = 6.dp, vertical = 1.dp),
                 )
             }
-            Text("Card frames & titles. One free every level-up.", style = mono(12.sp, c.ink), modifier = Modifier.padding(start = 12.dp).weight(1f))
+            Text("Card frames & titles. One free every level-up.", style = body(16.sp, c.blockInk), modifier = Modifier.padding(start = 12.dp).weight(1f))
         }
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (l.crates > 0) ChunkyButton("Open crate (${l.crates})", kind = Btn.Primary, small = true) { model.fx.click(); model.open(Sheet.Crate(true)) }
-            ChunkyButton("Buy · ${Loot.CRATE_COST}◆", kind = if (l.crates == 0 && canBuy) Btn.Primary else Btn.Neutral, small = true, enabled = canBuy) {
+            if (l.crates > 0) PillButton("Open crate (${l.crates})", kind = Btn.Primary, small = true) { model.fx.click(); model.open(Sheet.Crate(true)) }
+            PillButton("Buy · ${Loot.CRATE_COST}◆", kind = if (l.crates == 0 && canBuy) Btn.Primary else Btn.Secondary, small = true, enabled = canBuy, onBlock = true) {
                 model.fx.click(); model.open(Sheet.Crate(false))
             }
         }
@@ -167,18 +175,18 @@ private fun LockerPanel(model: GameModel, s: PlayerState) {
                 val owned = f.id in l.frames
                 val on = l.frame == f.id
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) c.accentSoft else c.surface2)
-                        .border(if (on) 2.dp else 1.dp, if (on) c.accent else c.line, RoundedCornerShape(12.dp))
+                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) c.surfaceSoft else c.surfaceSoft)
+                        .border(if (on) 2.dp else 1.dp, if (on) c.ink else c.hairline, RoundedCornerShape(12.dp))
                         .then(if (owned) Modifier.clickable { model.fx.click(); model.fx.buzz(10); model.update { locker().frame = f.id } } else Modifier)
                         .padding(6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
                         Modifier.width(30.dp).height(40.dp).clip(CardShape)
-                            .background(if (owned) FrameSwatch(f.id) else Brush.linearGradient(listOf(c.slot, c.slot)))
-                            .border(2.dp, if (owned) tierColor(f.r) else c.line2, CardShape),
+                            .background(if (owned) FrameSwatch(f.id) else Brush.linearGradient(listOf(c.surfaceSoft, c.surfaceSoft)))
+                            .border(2.dp, if (owned) tierColor(f.r) else c.hairline, CardShape),
                     )
-                    Text(if (owned) f.name else "???", style = mono(9.sp, c.hi, FontWeight.Bold), modifier = Modifier.padding(top = 3.dp), maxLines = 1)
+                    Text(if (owned) f.name else "???", style = label(11.sp, c.ink), modifier = Modifier.padding(top = 3.dp), maxLines = 1)
                 }
             }
         }
@@ -189,11 +197,11 @@ private fun LockerPanel(model: GameModel, s: PlayerState) {
                 val on = l.title == t.id
                 Text(
                     if (owned) t.name else "? ? ?",
-                    Modifier.clip(RoundedCornerShape(10.dp)).background(if (on) c.accent else c.surface2)
-                        .border(1.5.dp, if (owned) tierColor(t.r) else c.line, RoundedCornerShape(10.dp))
+                    Modifier.clip(RoundedCornerShape(10.dp)).background(if (on) c.ink else c.surfaceSoft)
+                        .border(1.5.dp, if (owned) tierColor(t.r) else c.hairline, RoundedCornerShape(10.dp))
                         .then(if (owned) Modifier.clickable { model.fx.click(); model.fx.buzz(10); model.update { locker().title = t.id } } else Modifier)
                         .padding(horizontal = 9.dp, vertical = 5.dp),
-                    style = mono(11.sp, if (on) Color.White else if (owned) c.ink else c.dim2, FontWeight.Bold),
+                    style = label(13.sp, if (on) Color.White else if (owned) c.ink else c.muted),
                 )
             }
         }
@@ -218,17 +226,17 @@ private fun ConfigPanel(model: GameModel, s: PlayerState) {
         PanelHead("Config")
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Sky", style = display(14.sp, c.hi))
-                Text("Night sky from 7pm to 6am", style = mono(10.sp, c.dim))
+                Text("Theme", style = headline(15.sp, c.ink))
+                Text("Dark after 7pm on Auto", style = body(12.sp, c.ink))
             }
-            Row(Modifier.clip(RoundedCornerShape(12.dp)).background(c.surface2).padding(3.dp)) {
+            Row(Modifier.clip(RoundedCornerShape(12.dp)).background(c.surfaceSoft).padding(3.dp)) {
                 for (m in listOf("auto", "day", "night")) {
                     val on = s.settings.theme == m
                     Text(
-                        m.replaceFirstChar(Char::uppercaseChar),
-                        Modifier.clip(RoundedCornerShape(9.dp)).background(if (on) c.accent else Color.Transparent)
+                        when (m) { "day" -> "Light"; "night" -> "Dark"; else -> "Auto" },
+                        Modifier.clip(RoundedCornerShape(9.dp)).background(if (on) c.ink else Color.Transparent)
                             .clickable { model.fx.click(); model.update { settings.theme = m }; model.applySky() }.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = mono(11.sp, if (on) Color.White else c.ink, FontWeight.Bold),
+                        style = label(13.sp, if (on) Color.White else c.ink),
                     )
                 }
             }
@@ -236,12 +244,12 @@ private fun ConfigPanel(model: GameModel, s: PlayerState) {
         Toggle("Voice", "Read new cards aloud", s.settings.voice) { v -> model.update { settings.voice = v } }
         Toggle("Music", "Day, night & battle themes", s.settings.music) { v -> model.update { settings.music = v } }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Music volume", style = display(14.sp, c.hi), modifier = Modifier.width(120.dp))
+            Text("Music volume", style = headline(15.sp, c.ink), modifier = Modifier.width(120.dp))
             var vol by remember { mutableStateOf(s.settings.musicVol.toFloat()) }
             Slider(
                 vol, { vol = it }, Modifier.weight(1f), steps = 19,
                 onValueChangeFinished = { model.update { settings.musicVol = (vol * 20).toInt() / 20.0 } },
-                colors = SliderDefaults.colors(thumbColor = c.sun2, activeTrackColor = c.accent, inactiveTrackColor = c.barBg),
+                colors = SliderDefaults.colors(thumbColor = c.lime, activeTrackColor = c.ink, inactiveTrackColor = c.hairlineSoft),
             )
         }
         Toggle("Sound FX", null, s.settings.sound) { v -> model.update { settings.sound = v }; if (v) model.fx.click() }
@@ -258,12 +266,12 @@ private fun Toggle(title: String, sub: String?, value: Boolean, onChange: (Boole
     val c = LocalWd.current
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = display(14.sp, c.hi))
-            if (sub != null) Text(sub, style = mono(10.sp, c.dim))
+            Text(title, style = headline(15.sp, c.ink))
+            if (sub != null) Text(sub, style = body(12.sp, c.ink))
         }
         Switch(
             value, onChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = c.grass, uncheckedTrackColor = c.slot, uncheckedBorderColor = c.line2, uncheckedThumbColor = c.dim2),
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = c.success, uncheckedTrackColor = c.surfaceSoft, uncheckedBorderColor = c.hairline, uncheckedThumbColor = c.muted),
         )
     }
 }
@@ -274,20 +282,20 @@ private fun BackupPanel(model: GameModel) {
     var confirm by remember { mutableStateOf(false) }
     Panel(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         PanelHead("Backup")
-        Text("Saved on this phone only.", style = mono(12.sp, c.ink))
+        Text("Saved on this phone only.", style = body(14.sp, c.ink))
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChunkyButton("Export", small = true) { model.exportBackup?.invoke() }
-            ChunkyButton("Import", small = true) { model.importBackup?.invoke() }
-            ChunkyButton("Wipe binder", small = true) { confirm = true }
+            PillButton("Export", small = true) { model.exportBackup?.invoke() }
+            PillButton("Import", small = true) { model.importBackup?.invoke() }
+            PillButton("Wipe binder", small = true) { confirm = true }
         }
     }
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
-        title = { Text("Wipe binder?", style = display(18.sp, Color(0xFF13283A))) },
-        text = { Text("Every card, credit and streak will be deleted. This can't be undone unless you exported a backup.", style = mono(12.sp, Color(0xFF1E3346))) },
+        title = { Text("Wipe binder?", style = headline(20.sp, Color.Black)) },
+        text = { Text("Every card, credit and streak will be deleted. This can't be undone unless you exported a backup.", style = body(15.sp, Color.Black)) },
         confirmButton = {
-            TextButton({ confirm = false; model.wipe() }) { Text("WIPE", style = mono(13.sp, Color(0xFFC8432A), FontWeight.Bold)) }
+            TextButton({ confirm = false; model.wipe() }) { Text("Wipe", style = label(15.sp, Color(0xFFFF3D8B))) }
         },
-        dismissButton = { TextButton({ confirm = false }) { Text("CANCEL", style = mono(13.sp, Color(0xFF1E3346), FontWeight.Bold)) } },
+        dismissButton = { TextButton({ confirm = false }) { Text("Cancel", style = label(15.sp, Color.Black)) } },
     )
 }

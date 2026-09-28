@@ -62,8 +62,8 @@ import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.CardShape
 import io.github.krixhnarr.wilddex.ui.CardView
 import io.github.krixhnarr.wilddex.ui.Chip
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
-import io.github.krixhnarr.wilddex.ui.DotText
+import io.github.krixhnarr.wilddex.ui.PillButton
+import io.github.krixhnarr.wilddex.ui.Eyebrow
 import io.github.krixhnarr.wilddex.ui.Icon
 import io.github.krixhnarr.wilddex.ui.LineIcon
 import io.github.krixhnarr.wilddex.ui.LocalWd
@@ -72,15 +72,19 @@ import io.github.krixhnarr.wilddex.ui.Raised
 import io.github.krixhnarr.wilddex.ui.Stars
 import io.github.krixhnarr.wilddex.ui.XpBar
 import io.github.krixhnarr.wilddex.ui.display
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 import io.github.krixhnarr.wilddex.ui.typeColor
+import io.github.krixhnarr.wilddex.ui.rarityBlock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-private val GRADE_COLOR = mapOf("S" to Color(0xFFF2B51D), "A" to Color(0xFF4CC764), "B" to Color(0xFF2F9BEA), "C" to Color(0xFF8DA0B0))
+
 private val PULL = mapOf(1 to "▲ New card", 2 to "▲ Uncommon pull", 3 to "◆ Rare pull", 4 to "★ Legendary pull")
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -147,7 +151,7 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
     }
 
     // ---- stage
-    val tc = typeColor(e)
+    val rays = rarityBlock(c, e.r)
     val inf = rememberInfiniteTransition(label = "stage")
     val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(24000, easing = LinearEasing)), label = "spin")
     val glow by inf.animateFloat(0.4f, 1f, infiniteRepeatable(tween(700), androidx.compose.animation.core.RepeatMode.Reverse), label = "glow")
@@ -159,12 +163,12 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
         Canvas(Modifier.size(340.dp).rotate(spin)) {
             val a = if (flip.value > 90f) 0.25f * glow else 0.45f
             for (i in 0 until 14) rotate(i * 360f / 14) {
-                drawArc(Brush.radialGradient(listOf(tc.copy(alpha = a), Color.Transparent), radius = size.minDimension / 2), -5f, 10f, true)
+                drawArc(rays.copy(alpha = a * 0.9f), -4f, 8f, true)
             }
         }
         if (burst.value in 0.001f..0.999f) Canvas(Modifier.size(320.dp)) {
             val t = burst.value
-            val col = if (r.holoNew) Color(0xFFFF8AD8) else if (e.r >= 3) Color(0xFFFFC83D) else tc
+            val col = if (r.holoNew) c.magenta else rarityBlock(c, e.r)
             for (i in 0 until 28) {
                 val ang = i * 2 * PI / 28
                 val rad = size.minDimension / 2 * (0.25f + t * 0.75f)
@@ -185,23 +189,23 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
         }
         if (r.grade != null && stamp.value > 0f) {
             val g = r.grade!!
-            val col = GRADE_COLOR.getValue(g.grade)
+            val col = c.ink
             Column(
                 Modifier.align(Alignment.TopEnd).padding(top = 14.dp, end = 8.dp)
                     .graphicsLayer { val k = 2.4f - 1.4f * stamp.value; scaleX = k; scaleY = k; alpha = stamp.value.coerceIn(0f, 1f); rotationZ = -12f }
                     .size(68.dp).clip(CircleShape).background(col.copy(alpha = 0.18f)).border(3.dp, col, CircleShape),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
             ) {
-                Text("SYNC", style = mono(8.sp, col, FontWeight.Bold, 0.2f))
-                Text(g.grade, style = display(30.sp, col))
+                Text("SYNC", style = caption(8.sp, col))
+                Text(g.grade, style = display(36.sp, col))
             }
         }
     }
 
     if (r.isNew && !started) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            DotText(if (revealing) "DECRYPTING" else "SEALED CARD", 16.dp, c.accentDeep)
-            Actions { ChunkyButton("Decrypt card", kind = Btn.Primary) { reveal() } }
+            Eyebrow(if (revealing) "Decrypting…" else "Sealed card · tap to decrypt")
+            Actions { PillButton("Decrypt card", kind = Btn.Primary) { reveal() } }
         }
         return
     }
@@ -218,12 +222,12 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
             if (r.xpGain > 0) XpBar(r.xpBefore, r.xpAfter)
             CardDetail(model, e, typing = true)
             Actions {
-                ChunkyButton("Play audio", icon = { LineIcon(Icon.Speaker, Modifier.size(18.dp), c.hi) }) { model.fx.speak("${e.n}. ${e.t}") }
-                ChunkyButton("Continue", kind = Btn.Primary) { model.close() }
+                PillButton("Play audio", icon = { col -> LineIcon(Icon.Speaker, Modifier.size(18.dp), col) }) { model.fx.speak("${e.n}. ${e.t}") }
+                PillButton("Continue", kind = Btn.Primary) { model.close() }
             }
             Text(
                 "wrong animal? not a ${e.n.lowercase()} · undo",
-                style = mono(11.sp, c.dim).copy(textDecoration = TextDecoration.Underline),
+                style = body(13.sp, c.ink).copy(textDecoration = TextDecoration.Underline),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable { model.rollback(sheet) }.padding(8.dp),
             )
@@ -236,8 +240,8 @@ fun RevealSheet(model: GameModel, sheet: Sheet.Reveal) {
 fun CardBack(modifier: Modifier, glow: Float = 1f) {
     Box(
         modifier.aspectRatio(0.7f).clip(CardShape)
-            .background(Brush.linearGradient(listOf(Color(0xFF1B3A6B), Color(0xFF0E1F3F), Color(0xFF1B3A6B))))
-            .border(3.dp, Color(0xFFFFC83D).copy(alpha = 0.5f + glow * 0.5f), CardShape),
+            .background(Color.Black)
+            .border(2.dp, Color(0xFFDCEEB1).copy(alpha = 0.4f + glow * 0.6f), CardShape),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -248,13 +252,13 @@ fun CardBack(modifier: Modifier, glow: Float = 1f) {
                 while (x < size.width) { drawCircle(Color.White.copy(alpha = 0.06f), step * 0.14f, Offset(x, y)); x += step }
                 y += step * 0.6f
             }
-            drawCircle(Color(0xFFFFC83D).copy(alpha = 0.18f * glow), size.width * 0.34f)
-            drawCircle(Color(0xFFFFC83D).copy(alpha = 0.8f), size.width * 0.3f, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
+            drawCircle(Color(0xFFDCEEB1).copy(alpha = 0.12f * glow), size.width * 0.34f)
+            drawCircle(Color(0xFFDCEEB1), size.width * 0.3f, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            LineIcon(Icon.Scan, Modifier.size(54.dp), Color(0xFFFFC83D), 2.2f)
-            Text("WILDDEX", style = display(16.sp, Color.White, 0.2f), modifier = Modifier.padding(top = 8.dp))
-            Text("TAP TO DECRYPT", style = mono(9.sp, Color(0xFFFFE08A), FontWeight.Bold, 0.2f))
+            LineIcon(Icon.Scan, Modifier.size(54.dp), Color(0xFFDCEEB1), 1.8f)
+            Text("WILDDEX", style = headline(17.sp, Color.White), modifier = Modifier.padding(top = 8.dp))
+            Text("TAP TO DECRYPT", style = caption(9.sp, Color.White))
         }
     }
 }

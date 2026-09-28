@@ -73,6 +73,19 @@ or XP, so it can't be farmed. Credits come from new discoveries and their sync
 grade, completed sectors, daily orders, weekly events, the streak, battles and
 operator level-ups. Older saves keep the levels their cards had reached.
 
+## Look
+
+The UI follows `../DESIGN.md` (a Figma-inspired system): a monochrome frame —
+white canvas, black ink, black/white pill buttons, 1px hairline cards, no
+shadows or gradients — with one oversized pastel colour block per screen
+carrying the story (lime home hero, lavender weekly event, coral rival, cream
+supply, mint battle field, navy level-up). Cards sit on their rarity's block
+(Common cream, Uncommon mint, Rare lilac, Legendary navy). Type is Inter
+(variable, weights 320–700, tight tracking on display sizes) standing in for
+figmaSans, with JetBrains Mono for uppercase eyebrows and captions. Dark mode
+is the same system on the inverse canvas. Tokens live in `ui/Theme.kt`,
+components in `ui/Components.kt`.
+
 ## Build
 
 Needs JDK 17+ and the Android SDK (compileSdk 36).
@@ -101,4 +114,4 @@ Backups exported from the app use the same format.
 ## Credits
 
 3D animal art: Microsoft Fluent Emoji (MIT, `app/src/main/assets/art/LICENSE.md`).
-Fonts: Russo One, JetBrains Mono (OFL). Model: EfficientNet-Lite4 (Apache 2.0).
+Fonts: Inter, JetBrains Mono (OFL). Model: EfficientNet-Lite4 (Apache 2.0).

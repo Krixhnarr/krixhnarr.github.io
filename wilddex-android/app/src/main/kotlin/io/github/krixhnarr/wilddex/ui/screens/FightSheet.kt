@@ -59,8 +59,8 @@ import io.github.krixhnarr.wilddex.core.Progress
 import io.github.krixhnarr.wilddex.ui.AnimalArt
 import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.Chip
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
-import io.github.krixhnarr.wilddex.ui.DotText
+import io.github.krixhnarr.wilddex.ui.PillButton
+import io.github.krixhnarr.wilddex.ui.display
 import io.github.krixhnarr.wilddex.ui.HOLO
 import io.github.krixhnarr.wilddex.ui.LocalWd
 import io.github.krixhnarr.wilddex.ui.TypeGlyph
@@ -68,7 +68,10 @@ import io.github.krixhnarr.wilddex.ui.XpBar
 import io.github.krixhnarr.wilddex.ui.compositeOver
 import io.github.krixhnarr.wilddex.ui.display
 import io.github.krixhnarr.wilddex.ui.hex
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 import io.github.krixhnarr.wilddex.ui.typeColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -124,8 +127,8 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
 
     LaunchedEffect(sheet) {
         model.fx.scene("battle"); model.fx.charge(); model.fx.buzz(20, 30, 20)
-        line(foeName to c.hi, " sends out " to null, fight.foe.active.entry.n to c.hi, "!" to null)
-        line("Go, " to null, fight.you.active.entry.n to c.hi, "!" to null)
+        line(foeName to c.ink, " sends out " to null, fight.foe.active.entry.n to c.ink, "!" to null)
+        line("Go, " to null, fight.you.active.entry.n to c.ink, "!" to null)
     }
     DisposableEffect(sheet) { onDispose { model.fx.scene(if (model.night) "night" else "day") } }
 
@@ -139,7 +142,7 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
             is Battle.Event.Guard -> {
                 fx.getValue(e.side).guarding = true
                 model.fx.guardSfx()
-                line(e.name to c.hi, " braces behind a guard." to null)
+                line(e.name to c.ink, " braces behind a guard." to null)
                 tick++
                 delay(600)
             }
@@ -155,15 +158,15 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
                 scope.launch { tgt.hurt.snapTo(1f); tgt.hurt.animateTo(0f, tween(450)) }
                 model.fx.hit(e.mult)
                 model.fx.buzz(*(if (e.crit || e.move == "overdrive") longArrayOf(30, 30, 70) else longArrayOf(if (e.mult > 1) 40 else 20)))
-                tgt.pops += Pop("-${e.dmg}", if (e.mult > 1) Color(0xFFFF5A3C) else if (e.mult < 1) Color(0xFF8DA0B0) else Color.White)
+                tgt.pops += Pop("-${e.dmg}", if (e.mult > 1) c.magenta else if (e.mult < 1) c.muted else c.blockInk)
                 tgt.guarding = false
                 tick++
                 val note = listOfNotNull(if (e.crit) "Critical!" else null, if (e.mult > 1) "Super effective!" else if (e.mult < 1) "Resisted…" else null).joinToString(" ")
                 val ty = Dex.types.getValue(e.type)
                 line(
-                    e.name to c.hi, " used " to null,
+                    e.name to c.ink, " used " to null,
                     (if (e.move == "overdrive") "Overdrive" else "${ty.name} strike") to c.readable(hex(ty.color)),
-                    " · ${e.dmg} dmg" to null, (if (note.isNotEmpty()) " · $note" else "") to if (note.isNotEmpty()) c.accentDeep else null,
+                    " · ${e.dmg} dmg" to null, (if (note.isNotEmpty()) " · $note" else "") to if (note.isNotEmpty()) c.ink else null,
                 )
                 if (big) showBanner(if (e.move == "overdrive") "OVERDRIVE" else if (e.crit) "CRITICAL" else "SUPER")
                 delay(750)
@@ -171,7 +174,7 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
             is Battle.Event.Faint -> {
                 model.fx.faint()
                 scope.launch { fx.getValue(e.side).faint.animateTo(1f, tween(600)) }
-                line(e.name to c.hi, " is out of the fight!" to null)
+                line(e.name to c.ink, " is out of the fight!" to null)
                 tick++
                 delay(800)
             }
@@ -180,7 +183,7 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
                 f.faint.snapTo(0f); f.guarding = false
                 tick++
                 scope.launch { f.enter.snapTo(0f); f.enter.animateTo(1f, spring(0.5f, Spring.StiffnessMediumLow)) }
-                line((if (e.side == "you") "Go, " else "Next up, ") to null, e.name to c.hi, "!" to null)
+                line((if (e.side == "you") "Go, " else "Next up, ") to null, e.name to c.ink, "!" to null)
                 delay(550)
             }
             is Battle.Event.End -> {}
@@ -217,15 +220,15 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
     // ---------------------------------------------------------------- layout
     tick // re-read fighters whenever an event plays
     Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp, end = 44.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(s.name.ifBlank { "Operator" }, style = display(14.sp, c.hi), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("VS", style = display(18.sp, c.coral), modifier = Modifier.padding(horizontal = 10.dp))
-        Text(foeName, style = display(14.sp, c.hi), modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1)
+        Text(s.name.ifBlank { "Operator" }, style = headline(15.sp, c.ink), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("vs", style = headline(19.sp, c.ink), modifier = Modifier.padding(horizontal = 10.dp))
+        Text(foeName, style = headline(15.sp, c.ink), modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1)
     }
     Box(
         Modifier.fillMaxWidth().height(330.dp).graphicsLayer { translationX = shake.value * 8f * density }
             .clip(RoundedCornerShape(22.dp))
-            .background(Brush.verticalGradient(if (c.night) listOf(Color(0xFF1B2A55), Color(0xFF1F4B45)) else listOf(Color(0xFFBDE8FF), Color(0xFF9BE37A))))
-            .border(1.dp, c.line2, RoundedCornerShape(22.dp)),
+            .background(c.mint)
+            .border(1.dp, c.hairline, RoundedCornerShape(22.dp)),
     ) {
         // ground ellipses
         Canvas(Modifier.fillMaxSize()) {
@@ -234,11 +237,11 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
         }
         FieldSide(fight.foe, fx.getValue("foe"), foe = true, tick)
         FieldSide(fight.you, fx.getValue("you"), foe = false, tick)
-        if (flash.value > 0f) Box(Modifier.fillMaxSize().background(Color(0xFFFFE08A).copy(alpha = flash.value * 0.6f)))
+        if (flash.value > 0f) Box(Modifier.fillMaxSize().background(c.lime.copy(alpha = flash.value * 0.8f)))
         banner?.let {
             val t = bannerAnim.value
             if (t in 0.001f..0.999f) Text(
-                it, style = display(34.sp, Color.White, 0.1f),
+                it, style = display(40.sp, Color.White),
                 modifier = Modifier.align(Alignment.Center)
                     .graphicsLayer { val k = if (t < 0.2f) 0.6f + t * 2 else 1f; scaleX = k; scaleY = k; alpha = if (t > 0.7f) (1 - t) / 0.3f else 1f; rotationZ = -6f }
                     .clip(RoundedCornerShape(10.dp)).background(c.coral).padding(horizontal = 16.dp, vertical = 4.dp),
@@ -246,8 +249,8 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
         }
     }
     Column(
-        Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 70.dp).clip(RoundedCornerShape(14.dp)).background(c.surface).padding(10.dp),
-    ) { for (l in log) Text(l, style = mono(12.sp, c.ink), modifier = Modifier.padding(vertical = 1.dp)) }
+        Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 70.dp).clip(RoundedCornerShape(14.dp)).background(c.canvas).padding(10.dp),
+    ) { for (l in log) Text(l, style = body(14.sp, c.ink), modifier = Modifier.padding(vertical = 1.dp)) }
 
     val o = outcome
     if (o == null) {
@@ -259,13 +262,13 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
                 val m = Battle.mult(t, them.types)
                 MoveButton(Modifier.weight(1f), "${Dex.types.getValue(t).name} strike", if (m > 1) "super" else if (m < 1) "weak" else null, hex(Dex.types.getValue(t).color), !busy, glyph = t) { move("strike:$t") }
             }
-            MoveButton(Modifier.weight(1f), "Guard", "+1 charge", c.accent, !busy) { move("guard") }
-            MoveButton(Modifier.weight(1f), "Overdrive", if (ready) "ready!" else "${me.charge}/${Battle.CHARGE_MAX}", c.sun2, !busy && ready, hot = ready) { move("overdrive") }
+            MoveButton(Modifier.weight(1f), "Guard", "+1 charge", c.ink, !busy) { move("guard") }
+            MoveButton(Modifier.weight(1f), "Overdrive", if (ready) "ready!" else "${me.charge}/${Battle.CHARGE_MAX}", c.lime, !busy && ready, hot = ready) { move("overdrive") }
         }
     } else {
         val won = fight.winner == "you"
         Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            DotText(if (won) "VICTORY" else "DEFEAT", 26.dp, if (won) c.gold else c.coral)
+            Text(if (won) "Victory" else "Defeat", style = display(56.sp, c.ink))
             FlowRow(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (o.reward.credits > 0) Chip("+${o.reward.credits}◆", highlight = true)
                 Chip("+${o.reward.xp} XP", highlight = won)
@@ -274,8 +277,8 @@ fun FightSheet(model: GameModel, sheet: Sheet.Fight) {
             }
             XpBar(o.xpBefore, o.xpAfter)
             Actions {
-                if (kind == "wild" || !won) ChunkyButton(if (kind == "rival") "Try again" else "Battle again") { model.open(Sheet.Fight(kind)) }
-                ChunkyButton("Done", kind = Btn.Primary) { model.close() }
+                if (kind == "wild" || !won) PillButton(if (kind == "rival") "Try again" else "Battle again") { model.open(Sheet.Fight(kind)) }
+                PillButton("Done", kind = Btn.Primary) { model.close() }
             }
         }
     }
@@ -290,28 +293,28 @@ private fun BoxScope.FieldSide(side: Battle.Side, f: SideFx, foe: Boolean, tick:
     // plate: name, HP and charge
     Column(
         Modifier.align(if (foe) Alignment.TopStart else Alignment.BottomEnd).padding(12.dp).width(170.dp)
-            .clip(RoundedCornerShape(14.dp)).background(c.surface.copy(alpha = 0.94f)).border(1.dp, c.line, RoundedCornerShape(14.dp)).padding(10.dp),
+            .clip(RoundedCornerShape(14.dp)).background(c.canvas.copy(alpha = 0.94f)).border(1.dp, c.hairline, RoundedCornerShape(14.dp)).padding(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(a.entry.n, style = display(13.sp, c.hi), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Text(" LV${a.lv}", style = mono(10.sp, c.dim, FontWeight.Bold))
+            Text(a.entry.n, style = headline(14.sp, c.ink), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text(" LV${a.lv}", style = label(12.sp, c.ink))
             Spacer(Modifier.weight(1f))
             for (t in a.types) TypeGlyph(t, Modifier.padding(start = 2.dp).size(13.dp))
         }
         val pct = a.hp.toFloat() / a.maxHp
-        val hpCol = if (pct < 0.25f) Color(0xFFE5483B) else if (pct < 0.55f) Color(0xFFF2B51D) else Color(0xFF4CC764)
+        val hpCol = if (pct < 0.25f) c.magenta else Color.Black
         val shown = remember(a) { Animatable(pct) }
         LaunchedEffect(a, a.hp) { shown.animateTo(pct, tween(400)) }
-        Box(Modifier.padding(top = 5.dp).fillMaxWidth().height(8.dp).clip(CircleShape).background(c.barBg)) {
+        Box(Modifier.padding(top = 5.dp).fillMaxWidth().height(8.dp).clip(CircleShape).background(c.hairlineSoft)) {
             Box(Modifier.fillMaxWidth(shown.value.coerceIn(0f, 1f)).height(8.dp).clip(CircleShape).background(hpCol))
         }
         Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${a.hp}/${a.maxHp}", style = mono(10.sp, c.dim, FontWeight.Bold), modifier = Modifier.weight(1f))
-            repeat(Battle.CHARGE_MAX) { i -> Box(Modifier.padding(start = 3.dp).size(8.dp).clip(CircleShape).background(if (i < a.charge) c.sun2 else c.slot)) }
+            Text("${a.hp}/${a.maxHp}", style = label(12.sp, c.ink), modifier = Modifier.weight(1f))
+            repeat(Battle.CHARGE_MAX) { i -> Box(Modifier.padding(start = 3.dp).size(8.dp).clip(CircleShape).background(if (i < a.charge) c.lime else c.surfaceSoft)) }
         }
         Row(Modifier.padding(top = 4.dp)) {
             side.team.forEachIndexed { i, t ->
-                Box(Modifier.padding(end = 4.dp).size(7.dp).clip(CircleShape).background(when { t.hp <= 0 -> c.dim2.copy(alpha = 0.4f); i == side.i -> c.accent; else -> c.hi }))
+                Box(Modifier.padding(end = 4.dp).size(7.dp).clip(CircleShape).background(when { t.hp <= 0 -> c.muted.copy(alpha = 0.4f); i == side.i -> c.ink; else -> c.ink }))
             }
         }
     }
@@ -329,10 +332,10 @@ private fun BoxScope.FieldSide(side: Battle.Side, f: SideFx, foe: Boolean, tick:
             },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.fillMaxSize(0.92f).clip(CircleShape).background(Brush.radialGradient(listOf(tc.copy(alpha = 0.45f), Color.Transparent))))
+        Box(Modifier.fillMaxSize(0.92f).clip(CircleShape).background(Color.White.copy(alpha = 0.55f)))
         if (a.holo) Box(Modifier.fillMaxSize(0.85f).clip(CircleShape).border(3.dp, Brush.sweepGradient(HOLO + HOLO.first()), CircleShape))
         AnimalArt(a.entry, Modifier.fillMaxSize(0.72f).graphicsLayer { alpha = 1f - f.hurt.value * 0.5f })
-        if (f.guarding) Box(Modifier.fillMaxSize().clip(CircleShape).border(4.dp, Color(0xFF8AD8FF), CircleShape).background(Color(0x338AD8FF)))
+        if (f.guarding) Box(Modifier.fillMaxSize().clip(CircleShape).border(4.dp, Color.Black, CircleShape).background(Color.White.copy(alpha = 0.3f)))
         for (b in f.bursts) key(b.id) { TypeBurst(b) { f.bursts.remove(b) } }
         for (p in f.pops) key(p.id) { DamagePop(p) { f.pops.remove(p) } }
     }
@@ -343,7 +346,7 @@ private fun BoxScope.DamagePop(p: Pop, done: () -> Unit) {
     val t = remember { Animatable(0f) }
     LaunchedEffect(Unit) { t.animateTo(1f, tween(900)); done() }
     Text(
-        p.text, style = display(26.sp, p.color).copy(shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.5f), Offset(0f, 3f), 4f)),
+        p.text, style = display(32.sp, p.color).copy(shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.5f), Offset(0f, 3f), 4f)),
         modifier = Modifier.align(Alignment.TopCenter).graphicsLayer { translationY = -t.value * 50f * density; alpha = 1f - t.value * t.value; val k = 1.3f - 0.3f * t.value; scaleX = k; scaleY = k },
     )
 }
@@ -374,14 +377,14 @@ private fun MoveButton(modifier: Modifier, label: String, hint: String?, tint: C
     val c = LocalWd.current
     io.github.krixhnarr.wilddex.ui.Raised(
         modifier.graphicsLayer { alpha = if (enabled) 1f else 0.5f },
-        shape = RoundedCornerShape(14.dp), color = if (hot) c.sun else tint.copy(alpha = 0.16f).compositeOver(c.surface),
+        shape = RoundedCornerShape(50), color = if (hot) c.lime else c.canvas,
         onClick = if (enabled) onClick else null,
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (glyph != null) TypeGlyph(glyph, Modifier.size(20.dp))
-            Text(label, style = display(13.sp, if (hot) c.onSun else c.hi), modifier = Modifier.padding(start = if (glyph != null) 8.dp else 0.dp).weight(1f), maxLines = 1)
+            Text(label, style = io.github.krixhnarr.wilddex.ui.label(15.sp, if (hot) c.blockInk else c.ink), modifier = Modifier.padding(start = if (glyph != null) 8.dp else 0.dp).weight(1f), maxLines = 1)
             if (hint != null) Text(
-                hint, style = mono(10.sp, when (hint) { "super" -> Color(0xFFE5483B); "weak" -> c.dim; else -> if (hot) c.onSun else c.dim }, FontWeight.Bold),
+                hint, style = caption(10.sp, when (hint) { "super" -> c.magenta; "weak" -> c.ink; else -> if (hot) c.blockInk else c.ink }),
             )
         }
     }

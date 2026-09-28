@@ -6,68 +6,130 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.krixhnarr.wilddex.R
 
-// "Field Expedition" palette: bright outdoor colours by day, a navy night sky
-// after 7pm. Every screen reads colours from here so both skies stay in sync.
+// Design system after DESIGN.md (Figma-inspired): a monochrome frame — white
+// canvas, black ink, pill buttons, hairline cards, no shadows — interrupted by
+// oversized pastel colour blocks that carry the story. Dark mode is the same
+// system on the inverse canvas (black frame, white ink); the pastel blocks keep
+// black ink in both.
 
 @Immutable
 data class WdColors(
     val night: Boolean,
-    val skyTop: Color, val skyBottom: Color,
-    val hill1: Color, val hill2: Color, val hill3: Color, val dirt: Color,
-    val surface: Color, val surface2: Color, val slot: Color, val slotHi: Color,
-    val ink: Color, val hi: Color, val dim: Color, val dim2: Color,
-    val line: Color, val line2: Color, val press: Color, val barBg: Color,
-    val accent: Color, val accentDeep: Color, val accentSoft: Color,
-    val sun: Color = Color(0xFFFFC83D), val sun2: Color = Color(0xFFFFB01F), val sunPress: Color = Color(0xFFD18A00), val onSun: Color = Color(0xFF3F2B00),
-    val coral: Color = Color(0xFFFF7A59), val grass: Color = Color(0xFF4CC764), val gold: Color = Color(0xFFF2B51D),
-    val good: Color = Color(0xFF1E9B48), val bad: Color = Color(0xFFC8432A),
+    /** Page background. */
+    val canvas: Color,
+    /** All text and the primary (selected / main action) surface. */
+    val ink: Color,
+    /** Text on an [ink] surface. */
+    val onInk: Color,
+    /** Off-white tiles, icon buttons, slots. */
+    val surfaceSoft: Color,
+    val hairline: Color,
+    val hairlineSoft: Color,
+    /** Disabled text and empty states only — never body copy. */
+    val muted: Color,
+    val scrim: Color = Color(0x99000000),
 ) {
-    /** Type colours are mixed toward the ink so they stay readable on light surfaces. */
-    fun readable(c: Color): Color = if (night) lerp(c, Color.White, 0.12f) else lerp(c, Color(0xFF1E3346), 0.28f)
+    // pastel colour blocks — identical in light and dark
+    val lime = Color(0xFFDCEEB1)
+    val lilac = Color(0xFFC5B0F4)
+    val cream = Color(0xFFF4ECD6)
+    val pink = Color(0xFFEFD4D4)
+    val mint = Color(0xFFC8E6CD)
+    val coral = Color(0xFFF3C9B6)
+    val navy = Color(0xFF1F1D3D)
+    /** Ink on a pastel block. */
+    val blockInk = Color(0xFF000000)
+    /** Single-shot promo accent — one claimable reward / promo per screen. */
+    val magenta = Color(0xFFFF3D8B)
+    val success = Color(0xFF1EA64A)
+
+    /** Affinity-type colours are game data; keep them readable against the canvas. */
+    fun readable(c: Color): Color = if (night) lerp(c, Color.White, 0.18f) else lerp(c, Color.Black, 0.35f)
 }
 
-val DayColors = WdColors(
+val LightColors = WdColors(
     night = false,
-    skyTop = Color(0xFF62C4FF), skyBottom = Color(0xFFD4F1FF),
-    hill1 = Color(0xFF9BE37A), hill2 = Color(0xFF5DCB63), hill3 = Color(0xFF3FAE55), dirt = Color(0xFF2E8A42),
-    surface = Color.White, surface2 = Color(0xFFEEF5FA), slot = Color(0xFFE3ECF3), slotHi = Color(0xFFD6E3EC),
-    ink = Color(0xFF1E3346), hi = Color(0xFF13283A), dim = Color(0xFF5B7083), dim2 = Color(0xFF8DA0B0),
-    line = Color(0x1F1E3346), line2 = Color(0x3D1E3346), press = Color(0xFFC3D3DF), barBg = Color(0xFFE2ECF3),
-    accent = Color(0xFF2F9BEA), accentDeep = Color(0xFF1766A8), accentSoft = Color(0xFFBFE3FB),
+    canvas = Color(0xFFFFFFFF), ink = Color(0xFF000000), onInk = Color(0xFFFFFFFF),
+    surfaceSoft = Color(0xFFF7F7F5), hairline = Color(0xFFE6E6E6), hairlineSoft = Color(0xFFF1F1F1), muted = Color(0xFF9E9E9E),
 )
 
-val NightColors = WdColors(
+val DarkColors = WdColors(
     night = true,
-    skyTop = Color(0xFF0B1633), skyBottom = Color(0xFF26306A),
-    hill1 = Color(0xFF1F4B45), hill2 = Color(0xFF173B38), hill3 = Color(0xFF112E2D), dirt = Color(0xFF0B201F),
-    surface = Color(0xFF1B274B), surface2 = Color(0xFF243259), slot = Color(0xFF2A3963), slotHi = Color(0xFF33436F),
-    ink = Color(0xFFE6EEFB), hi = Color.White, dim = Color(0xFFA5B4D0), dim2 = Color(0xFF7486A8),
-    line = Color(0x24C8DCFF), line2 = Color(0x47C8DCFF), press = Color(0xFF0C1430), barBg = Color(0x59000000),
-    accent = Color(0xFF4FB3FF), accentDeep = Color(0xFF7CC8FF), accentSoft = Color(0xFF2B4E7E),
+    canvas = Color(0xFF000000), ink = Color(0xFFFFFFFF), onInk = Color(0xFF000000),
+    surfaceSoft = Color(0xFF161616), hairline = Color(0xFF2B2B2B), hairlineSoft = Color(0xFF1C1C1C), muted = Color(0xFF6E6E6E),
 )
 
-val LocalWd = staticCompositionLocalOf { DayColors }
+val LocalWd = staticCompositionLocalOf { LightColors }
 
-val Display = FontFamily(Font(R.font.russo_one))
+/** Pastel blocks in rotation, for screens that need "the next" block. */
+val WdColors.blocks: List<Color> get() = listOf(lime, lilac, cream, mint, pink, coral)
+
+// ---------------------------------------------------------------- type
+// Inter (variable) stands in for figmaSans, JetBrains Mono for figmaMono,
+// as DESIGN.md suggests. Weights follow the guide: 320 330 340 480 540 700.
+
+@OptIn(ExperimentalTextApi::class)
+private fun inter(w: Int) = Font(R.font.inter, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+
+val Sans = FontFamily(inter(320), inter(330), inter(340), inter(400), inter(480), inter(540), inter(700))
 val Mono = FontFamily(Font(R.font.jetbrains_mono_regular, FontWeight.Normal), Font(R.font.jetbrains_mono_bold, FontWeight.Bold))
 
-fun display(size: TextUnit, color: Color, spacing: Float = 0.03f) =
-    TextStyle(fontFamily = Display, fontSize = size, color = color, letterSpacing = (size.value * spacing).sp)
+private val tight = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None)
 
-fun mono(size: TextUnit, color: Color, weight: FontWeight = FontWeight.Normal, spacing: Float = 0f) =
-    TextStyle(fontFamily = Mono, fontSize = size, color = color, fontWeight = weight, letterSpacing = (size.value * spacing).sp)
+/** Display / hero headline: light weight, tight tracking (-2% of size). */
+fun display(size: TextUnit, color: Color) = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight(340), fontSize = size, color = color,
+    letterSpacing = (-0.02).em, lineHeight = size * 1.04, lineHeightStyle = tight,
+)
+
+/** Titles inside colour blocks and cards. */
+fun headline(size: TextUnit, color: Color) = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight(540), fontSize = size, color = color,
+    letterSpacing = (-0.01).em, lineHeight = size * 1.3,
+)
+
+/** Bold card title (the collectible card name, stat numbers). */
+fun title(size: TextUnit, color: Color) = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight(700), fontSize = size, color = color, lineHeight = size * 1.3,
+)
+
+/** Body copy: hierarchy comes from weight, never from grey. */
+fun body(size: TextUnit, color: Color, weight: Int = 330) = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight(weight), fontSize = size, color = color,
+    letterSpacing = (-0.008).em, lineHeight = size * 1.42,
+)
+
+/** Pill buttons and emphasised links. */
+fun label(size: TextUnit, color: Color) = TextStyle(
+    fontFamily = Sans, fontWeight = FontWeight(480), fontSize = size, color = color, letterSpacing = (-0.005).em,
+)
+
+/** Mono eyebrow / caption — taxonomy only, always uppercase with positive tracking. */
+fun caption(size: TextUnit, color: Color, bold: Boolean = false) = TextStyle(
+    fontFamily = Mono, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, fontSize = size, color = color,
+    letterSpacing = 0.05.em,
+)
 
 fun hex(s: String): Color = Color(android.graphics.Color.parseColor(s))
 
+// shape scale
+object R8 { val xs = 2.dp; val sm = 6.dp; val md = 8.dp; val lg = 24.dp; val xl = 32.dp }
+
 @Composable
 fun WildDexTheme(night: Boolean, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalWd provides if (night) NightColors else DayColors, content = content)
+    CompositionLocalProvider(LocalWd provides if (night) DarkColors else LightColors, content = content)
 }
+

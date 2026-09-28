@@ -58,6 +58,7 @@ class ScreenShots {
     @Test fun homeNight() = shot("home-night", night = true)
     @Test fun cards() = shot("cards") { tab = Tab.Cards }
     @Test fun ops() = shot("ops") { tab = Tab.Ops }
+    @Test fun cardsNight() = shot("cards-night", night = true) { tab = Tab.Cards }
     @Test fun profile() = shot("profile") { tab = Tab.Id }
     @Test fun cardSheet() = shot("card-sheet") { open(Sheet.Card("red-fox")) }
     @Test fun cardStats() = shot("card-stats") { open(Sheet.Card("dog")) }

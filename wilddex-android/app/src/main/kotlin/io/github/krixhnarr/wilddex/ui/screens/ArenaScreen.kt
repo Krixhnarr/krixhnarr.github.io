@@ -39,9 +39,11 @@ import io.github.krixhnarr.wilddex.live
 import io.github.krixhnarr.wilddex.ui.AnimalArt
 import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.Chip
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
+import io.github.krixhnarr.wilddex.ui.PillButton
 import io.github.krixhnarr.wilddex.ui.compositeOver
-import io.github.krixhnarr.wilddex.ui.DotText
+import io.github.krixhnarr.wilddex.ui.Block
+import io.github.krixhnarr.wilddex.ui.Eyebrow
+import io.github.krixhnarr.wilddex.ui.display
 import io.github.krixhnarr.wilddex.ui.HOLO
 import io.github.krixhnarr.wilddex.ui.HelpButton
 import io.github.krixhnarr.wilddex.ui.LocalWd
@@ -52,8 +54,12 @@ import io.github.krixhnarr.wilddex.ui.Small
 import io.github.krixhnarr.wilddex.ui.TypeGlyph
 import io.github.krixhnarr.wilddex.ui.display
 import io.github.krixhnarr.wilddex.ui.hex
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 import io.github.krixhnarr.wilddex.ui.typeColor
+import io.github.krixhnarr.wilddex.ui.rarityBlock
 import kotlin.math.roundToInt
 
 @Composable
@@ -66,9 +72,9 @@ fun ArenaScreen(model: GameModel) {
         if (s.ownedKeys().isEmpty()) {
             Panel(Modifier.fillMaxWidth()) {
                 PanelHead("No squad yet")
-                Text("Catch your first card to unlock battles.", style = mono(12.sp, c.ink))
+                Text("Catch your first card to unlock battles.", style = body(14.sp, c.ink))
                 Spacer(Modifier.height(12.dp))
-                ChunkyButton("Go scan", kind = Btn.Primary) { model.go(Tab.Scan) }
+                PillButton("Go scan", kind = Btn.Primary) { model.go(Tab.Scan) }
             }
             return@Column
         }
@@ -78,19 +84,19 @@ fun ArenaScreen(model: GameModel) {
         val pwr = keys.sumOf { Battle.pwrOf(s, it) }.roundToInt()
         val rivalLv = kotlin.math.floor(r.lvs.sum().toDouble() / r.lvs.size + 0.5).toInt()
 
-        Panel(Modifier.fillMaxWidth(), tint = c.coral, border = if (r.won) c.line else c.coral.copy(alpha = 0.6f)) {
-            PanelHead("Daily rival") { Small(if (r.won) "defeated ✓ · new rival tomorrow" else "+${Battle.RIVAL_REWARD.credits}◆ · +${Battle.RIVAL_REWARD.xp} XP") }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                DotText(r.name, 20.dp, c.hi, Modifier.weight(1f, fill = false))
-                Spacer(Modifier.weight(1f))
-                Chip("LV $rivalLv", highlight = true)
+        // the story block of this screen: today's rival, on coral
+        Block(c.coral, Modifier.fillMaxWidth()) {
+            Eyebrow(if (r.won) "Daily rival · defeated ✓" else "Daily rival · +${Battle.RIVAL_REWARD.credits}◆ · +${Battle.RIVAL_REWARD.xp} XP", c.blockInk)
+            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.Bottom) {
+                Text(r.name, style = display(40.sp, c.blockInk), modifier = Modifier.weight(1f))
+                Chip("Lv $rivalLv", highlight = true)
             }
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 r.keys.forEachIndexed { i, k -> FighterChip(Modifier.weight(1f), Dex.byKey.getValue(k), r.lvs[i], false) }
             }
-            ChunkyButton(
+            PillButton(
                 if (r.won) "Rematch for XP" else if (r.tries > 0) "Try again" else "Challenge", Modifier.fillMaxWidth(),
-                kind = if (r.won) Btn.Neutral else Btn.Primary,
+                kind = if (r.won) Btn.Secondary else Btn.Primary, onBlock = true,
             ) { model.open(Sheet.Fight("rival")) }
         }
 
@@ -101,18 +107,18 @@ fun ArenaScreen(model: GameModel) {
                     val k = keys.getOrNull(i)
                     if (k == null) {
                         Column(
-                            Modifier.weight(1f).height(150.dp).clip(RoundedCornerShape(16.dp)).background(c.surface2).border(1.5.dp, c.line2, RoundedCornerShape(16.dp)).padding(8.dp),
+                            Modifier.weight(1f).height(150.dp).clip(RoundedCornerShape(16.dp)).background(c.surfaceSoft).border(1.5.dp, c.hairline, RoundedCornerShape(16.dp)).padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
                         ) {
-                            Text("+", style = display(26.sp, c.dim2))
-                            Text("scan more animals", style = mono(9.sp, c.dim), textAlign = TextAlign.Center)
+                            Text("+", style = display(32.sp, c.muted))
+                            Text("scan more animals", style = body(11.sp, c.ink), textAlign = TextAlign.Center)
                         }
                     } else SquadSlot(model, Modifier.weight(1f), i, k)
                 }
             }
             Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                ChunkyButton("Auto-pick", small = true) { model.fx.click(); model.update { battle().squad = Battle.bestSquad(this).toMutableList() } }
-                Text("Slot 1 fights first", style = mono(11.sp, c.dim), modifier = Modifier.padding(start = 10.dp))
+                PillButton("Auto-pick", small = true) { model.fx.click(); model.update { battle().squad = Battle.bestSquad(this).toMutableList() } }
+                Text("Slot 1 fights first", style = body(13.sp, c.ink), modifier = Modifier.padding(start = 10.dp))
             }
         }
 
@@ -121,10 +127,10 @@ fun ArenaScreen(model: GameModel) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip("+${Battle.SIM_REWARD.credits}◆", highlight = true)
                 Chip("+${Battle.SIM_REWARD.xp} XP", highlight = true)
-                Text("per win", style = mono(11.sp, c.dim))
+                Text("per win", style = body(13.sp, c.ink))
             }
             Spacer(Modifier.height(10.dp))
-            ChunkyButton("Find a battle", Modifier.fillMaxWidth()) { model.open(Sheet.Fight("wild")) }
+            PillButton("Find a battle", Modifier.fillMaxWidth()) { model.open(Sheet.Fight("wild")) }
         }
 
         Panel(Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -133,8 +139,8 @@ fun ArenaScreen(model: GameModel) {
                 val ty = Dex.types.getValue(t)
                 Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     TypeGlyph(t, Modifier.size(18.dp))
-                    Text(ty.name, style = mono(12.sp, c.readable(hex(ty.color)), FontWeight.Bold), modifier = Modifier.padding(start = 6.dp).weight(1f))
-                    Text("beats", style = mono(10.sp, c.dim), modifier = Modifier.padding(end = 6.dp))
+                    Text(ty.name, style = label(14.sp, c.readable(hex(ty.color))), modifier = Modifier.padding(start = 6.dp).weight(1f))
+                    Text("beats", style = body(12.sp, c.ink), modifier = Modifier.padding(end = 6.dp))
                     for (x in Battle.STRONG.getValue(t)) {
                         Box(Modifier.padding(start = 4.dp).size(26.dp).clip(CircleShape).background(hex(Dex.types.getValue(x).color).copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                             TypeGlyph(x, Modifier.size(15.dp))
@@ -148,9 +154,9 @@ fun ArenaScreen(model: GameModel) {
             PanelHead("Record")
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for ((v, l) in listOf(b.wins to "Wins", b.losses to "Losses", b.rivals to "Rivals beaten")) {
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(c.surface2).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(pad3(v), style = display(18.sp, c.hi))
-                        Text(l.uppercase(), style = mono(9.sp, c.dim, FontWeight.Bold))
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(c.surfaceSoft).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(pad3(v), style = headline(19.sp, c.ink))
+                        Text(l.uppercase(), style = label(11.sp, c.ink))
                     }
                 }
             }
@@ -163,13 +169,13 @@ fun FighterChip(modifier: Modifier, e: Entry, lv: Int, holo: Boolean) {
     val c = LocalWd.current
     val tc = typeColor(e)
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(tc.copy(alpha = 0.15f))
-            .border(if (holo) 2.dp else 1.dp, if (holo) Brush.sweepGradient(HOLO + HOLO.first()) else Brush.linearGradient(listOf(c.line, c.line)), RoundedCornerShape(14.dp))
+        modifier.clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.6f))
+            .border(if (holo) 2.dp else 1.dp, if (holo) Brush.sweepGradient(HOLO + HOLO.first()) else Brush.linearGradient(listOf(c.hairline, c.hairline)), RoundedCornerShape(14.dp))
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         AnimalArt(e, Modifier.size(44.dp))
-        Text("LV$lv", style = mono(10.sp, c.hi, FontWeight.Bold))
+        Text("LV$lv", style = label(12.sp, c.ink))
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { for (t in Dex.typesOf(e)) TypeGlyph(t, Modifier.size(13.dp)) }
     }
 }
@@ -181,17 +187,17 @@ private fun SquadSlot(model: GameModel, modifier: Modifier, i: Int, k: String) {
     val e = Dex.byKey.getValue(k)
     val rec = s.caught.getValue(k)
     val lv = Game.cardLevel(rec)
-    Raised(modifier, color = typeColor(e).copy(alpha = 0.16f).compositeOver(c.surface), onClick = { model.fx.click(); model.open(Sheet.Squad(i)) }) {
+    Raised(modifier, shape = RoundedCornerShape(16.dp), color = rarityBlock(c, e.r), onClick = { model.fx.click(); model.open(Sheet.Squad(i)) }) {
         Column(Modifier.fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth()) {
-                Text("${i + 1}", style = display(12.sp, Color.White), modifier = Modifier.clip(CircleShape).background(c.accent).padding(horizontal = 7.dp, vertical = 1.dp))
+                Text("${i + 1}", style = headline(13.sp, Color.White), modifier = Modifier.clip(CircleShape).background(c.ink).padding(horizontal = 7.dp, vertical = 1.dp))
                 Spacer(Modifier.weight(1f))
-                if (rec.holo != null) Text("HOLO", style = mono(8.sp, Color(0xFF1E1E22), FontWeight.Bold), modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Brush.horizontalGradient(HOLO)).padding(horizontal = 3.dp))
+                if (rec.holo != null) Text("HOLO", style = label(10.sp, Color(0xFF1E1E22)), modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Brush.horizontalGradient(HOLO)).padding(horizontal = 3.dp))
             }
             AnimalArt(e, Modifier.size(56.dp).padding(top = 2.dp))
-            Text(e.n, style = display(12.sp, c.hi), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(e.n, style = headline(13.sp, c.ink), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(vertical = 2.dp)) { for (t in Dex.typesOf(e)) TypeGlyph(t, Modifier.size(13.dp)) }
-            Text("LV $lv · PWR ${Battle.pwrOf(s, k).roundToInt()}", style = mono(9.sp, c.dim, FontWeight.Bold))
+            Text("LV $lv · PWR ${Battle.pwrOf(s, k).roundToInt()}", style = label(11.sp, c.ink))
         }
     }
 }
@@ -209,7 +215,7 @@ fun SquadSheet(model: GameModel, slot: Int) {
             val rec = s.caught.getValue(k)
             val at = keys.indexOf(k)
             Raised(
-                Modifier.fillMaxWidth(), color = if (at == slot) c.accentSoft else c.surface,
+                Modifier.fillMaxWidth(), color = if (at == slot) c.surfaceSoft else c.canvas,
                 onClick = {
                     val next = keys.toMutableList()
                     if (at >= 0) next[at] = next.getOrElse(slot) { k }
@@ -220,15 +226,15 @@ fun SquadSheet(model: GameModel, slot: Int) {
                 },
             ) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(48.dp).clip(CircleShape).background(typeColor(e).copy(alpha = 0.2f)), contentAlignment = Alignment.Center) { AnimalArt(e, Modifier.size(36.dp)) }
+                    Box(Modifier.size(48.dp).clip(CircleShape).background(rarityBlock(c, e.r)), contentAlignment = Alignment.Center) { AnimalArt(e, Modifier.size(36.dp)) }
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(e.n + if (rec.holo != null) "  ✦" else "", style = display(15.sp, c.hi))
+                        Text(e.n + if (rec.holo != null) "  ✦" else "", style = headline(16.sp, c.ink))
                         Text(
                             "LV ${Game.cardLevel(rec)} · ${Dex.typesOf(e).joinToString(" / ") { Dex.types.getValue(it).name }}${if (at >= 0) " · in slot ${at + 1}" else ""}",
-                            style = mono(10.sp, c.dim),
+                            style = body(12.sp, c.ink),
                         )
                     }
-                    Text("${Battle.pwrOf(s, k).roundToInt()}", style = display(16.sp, c.accentDeep))
+                    Text("${Battle.pwrOf(s, k).roundToInt()}", style = headline(17.sp, c.ink))
                 }
             }
         }
