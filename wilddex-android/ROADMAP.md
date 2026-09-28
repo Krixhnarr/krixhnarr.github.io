@@ -22,6 +22,11 @@ Everything that's done, in progress, and still to do. ✅ done · 🔧 in progre
   and the app's SHA-1 added in the Firebase console
 - ⬜ App icon set (adaptive icon, all densities) and a splash screen
 
+## 0b. Look
+- ✅ Redesigned after DESIGN.md (Figma-inspired): monochrome frame, pill buttons,
+  hairline cards, pastel colour blocks, Inter + mono eyebrows, inverse dark mode
+- ⬜ Check readability outdoors in bright sun, and the dark theme at night, on real phones
+
 ## 1. Accounts & cloud save
 - ✅ Sign in / create account with email + password
 - ✅ Forgot password (reset email) and email verification
@@ -111,5 +116,5 @@ Live-animal scanning with anti-spoof liveness · 261 cards in 20 sectors ·
 13 affinity types · levels, stars, holo variants, sync grades · battles with a
 daily rival · supply crates, frames & titles · daily orders, streaks, weekly
 events, badges · compare with friends via QR · field map · home hub, bottom
-tabs · Field Expedition day/night theme · generated music & animations ·
+tabs · Figma-style design (DESIGN.md) with dark mode · generated music & animations ·
 accounts & cloud save on the web (awaiting Firebase config) · native Android app

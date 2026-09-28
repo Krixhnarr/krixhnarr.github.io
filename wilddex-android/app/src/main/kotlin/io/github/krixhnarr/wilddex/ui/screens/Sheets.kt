@@ -56,7 +56,7 @@ import io.github.krixhnarr.wilddex.live
 import io.github.krixhnarr.wilddex.ui.Bar
 import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.CardView
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
+import io.github.krixhnarr.wilddex.ui.PillButton
 import io.github.krixhnarr.wilddex.ui.Icon
 import io.github.krixhnarr.wilddex.ui.LineIcon
 import io.github.krixhnarr.wilddex.ui.LocalWd
@@ -67,7 +67,10 @@ import io.github.krixhnarr.wilddex.ui.Stars
 import io.github.krixhnarr.wilddex.ui.TypeGlyph
 import io.github.krixhnarr.wilddex.ui.display
 import io.github.krixhnarr.wilddex.ui.hex
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 import io.github.krixhnarr.wilddex.ui.typeColor
 import kotlinx.coroutines.launch
 
@@ -89,9 +92,9 @@ fun SheetContent(model: GameModel, sheet: Sheet) {
 fun SheetHead(eyebrow: String, title: String, sub: String? = null) {
     val c = LocalWd.current
     Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(eyebrow.uppercase(), style = mono(10.sp, c.accentDeep, FontWeight.Bold, 0.16f))
-        Text(title, style = display(26.sp, c.hi), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
-        if (sub != null) Text(sub, style = mono(11.sp, c.dim).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic), textAlign = TextAlign.Center)
+        Text(eyebrow.uppercase(), style = caption(10.sp, c.ink))
+        Text(title, style = display(32.sp, c.ink), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
+        if (sub != null) Text(sub, style = body(13.sp, c.ink).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic), textAlign = TextAlign.Center)
     }
 }
 
@@ -101,13 +104,12 @@ fun TypeChips(e: Entry) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         for (t in Dex.typesOf(e)) {
             val ty = Dex.types.getValue(t)
-            val col = hex(ty.color)
             Row(
-                Modifier.clip(RoundedCornerShape(12.dp)).background(col.copy(alpha = 0.18f)).padding(horizontal = 9.dp, vertical = 4.dp),
+                Modifier.clip(RoundedCornerShape(50)).background(c.surfaceSoft).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TypeGlyph(t, Modifier.size(15.dp))
-                Text(" ${ty.name.uppercase()}", style = mono(11.sp, c.readable(col), FontWeight.Bold, 0.06f))
+                Text("  ${ty.name}", style = label(13.sp, c.ink))
             }
         }
     }
@@ -141,7 +143,6 @@ fun TiltCard(model: GameModel, e: Entry, width: Int = 210) {
         onDispose { sm?.unregisterListener(l) }
     }
     Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size((width * 1.25f).dp).background(Brush.radialGradient(listOf(tc.copy(alpha = 0.35f), Color.Transparent))))
         CardView(
             e, s.caught[e.k], intel = s.intel[e.k] == true, frame = model.frame(),
             modifier = Modifier.width(width.dp)
@@ -187,9 +188,9 @@ fun CardSheet(model: GameModel, key: String) {
     TiltCard(model, e)
     CardDetail(model, e)
     Actions {
-        if (rec != null) ChunkyButton("Play audio", icon = { LineIcon(Icon.Speaker, Modifier.size(18.dp), c.hi) }) { model.fx.speak("${e.n}. ${e.t}") }
-        if (rec == null && !intel) ChunkyButton("Decrypt · ${Game.DECRYPT_COST}◆", enabled = s.shards >= Game.DECRYPT_COST) { model.decrypt(key) }
-        ChunkyButton("Close", kind = Btn.Primary) { model.close() }
+        if (rec != null) PillButton("Play audio", icon = { col -> LineIcon(Icon.Speaker, Modifier.size(18.dp), col) }) { model.fx.speak("${e.n}. ${e.t}") }
+        if (rec == null && !intel) PillButton("Decrypt · ${Game.DECRYPT_COST}◆", enabled = s.shards >= Game.DECRYPT_COST) { model.decrypt(key) }
+        PillButton("Close", kind = Btn.Primary) { model.close() }
     }
 }
 
@@ -203,9 +204,9 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
     val set = Dex.setOf(e)
     val rarity = Dex.rarity.getValue(e.r)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("#${pad3(e.no)} · ${set.name}".uppercase(), style = mono(10.sp, c.accentDeep, FontWeight.Bold, 0.14f))
-        Text(if (known) e.n else "Unknown", style = display(28.sp, c.hi), textAlign = TextAlign.Center)
-        Text(if (known) e.s else "species incognita", style = mono(12.sp, c.dim).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic))
+        Text("#${pad3(e.no)} · ${set.name}".uppercase(), style = caption(10.sp, c.ink))
+        Text(if (known) e.n else "Unknown", style = display(34.sp, c.ink), textAlign = TextAlign.Center)
+        Text(if (known) e.s else "species incognita", style = body(14.sp, c.ink).copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic))
         Spacer(Modifier.height(8.dp))
         TypeChips(e)
     }
@@ -214,9 +215,9 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
             TypedText(e.t, typing)
             Spacer(Modifier.height(8.dp))
             Text(buildAnnotatedString {
-                withStyle(SpanStyle(color = c.accentDeep, fontWeight = FontWeight.Bold)) { append("// did you know? ") }
+                withStyle(SpanStyle(color = c.ink, fontWeight = FontWeight.Bold)) { append("// did you know? ") }
                 append(e.f)
-            }, style = mono(12.sp, c.ink))
+            }, style = body(14.sp, c.ink))
         }
         StatsSection(model, e, rec)
         Section("Field data", "${rarity.value} XP") {
@@ -242,8 +243,8 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
             if (e.c.size > 1 && rec.forms.isNotEmpty()) {
                 Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (f in rec.forms) Text(
-                        title(Dex.labels[f]), style = mono(10.sp, c.ink, FontWeight.Bold),
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(c.surface2).padding(horizontal = 7.dp, vertical = 3.dp),
+                        title(Dex.labels[f]), style = label(12.sp, c.ink),
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(c.surfaceSoft).padding(horizontal = 7.dp, vertical = 3.dp),
                     )
                 }
             }
@@ -253,7 +254,7 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
             Text(
                 if (intel) "Intel decrypted. Find a real ${e.n.lowercase()} — look in ${e.h.lowercase()} — and scan it to capture this card."
                 else "Encrypted. This ${rarity.name.lowercase()} signal was last traced to ${e.h.lowercase()}.",
-                style = mono(12.sp, c.ink),
+                style = body(14.sp, c.ink),
             )
         }
         StatsSection(model, e, null)
@@ -264,8 +265,8 @@ fun CardDetail(model: GameModel, e: Entry, typing: Boolean = false) {
 private fun Fact(label: String, value: String) {
     val c = LocalWd.current
     Row(Modifier.padding(vertical = 3.dp)) {
-        Text(label.uppercase(), style = mono(10.sp, c.dim, FontWeight.Bold, 0.1f), modifier = Modifier.width(72.dp).padding(top = 1.dp))
-        Text(value, style = mono(12.sp, c.ink), modifier = Modifier.weight(1f))
+        Text(label.uppercase(), style = caption(10.sp, c.ink), modifier = Modifier.width(72.dp).padding(top = 1.dp))
+        Text(value, style = body(14.sp, c.ink), modifier = Modifier.weight(1f))
     }
 }
 
@@ -276,7 +277,7 @@ private fun TypedText(text: String, typing: Boolean) {
     LaunchedEffect(text, typing) {
         while (shown < text.length) { kotlinx.coroutines.delay(14); shown = minOf(text.length, shown + 1) }
     }
-    Text(text.take(shown) + if (shown < text.length) "▌" else "", style = mono(13.sp, c.hi))
+    Text(text.take(shown) + if (shown < text.length) "▌" else "", style = body(15.sp, c.ink))
 }
 
 @Composable
@@ -291,19 +292,19 @@ fun StatsSection(model: GameModel, e: Entry, rec: io.github.krixhnarr.wilddex.co
     val glow = remember(e.k) { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(boosted) { if (boosted != null) { glow.snapTo(1f); glow.animateTo(0f, androidx.compose.animation.core.tween(1200)) } }
     Section("Battle stats · Lv ${if (owned) lv else "—"}") {
-        if (owned) Row(Modifier.padding(bottom = 8.dp)) { Stars(Game.stars(lv), 13.dp, c.line2) }
+        if (owned) Row(Modifier.padding(bottom = 8.dp)) { Stars(Game.stars(lv), 13.dp) }
         val before = boosted?.let { Game.statsFor(e, it.before) }
         for (k in Game.STAT_KEYS) {
             Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(k.uppercase(), style = mono(11.sp, c.dim, FontWeight.Bold), modifier = Modifier.width(40.dp))
-                Bar(if (owned) st[k] / 100f else 0f, androidx.compose.ui.graphics.lerp(tc, c.gold, glow.value), Modifier.weight(1f), height = 9.dp)
-                Text(if (owned) "${st[k]}" else "??", style = mono(12.sp, c.hi, FontWeight.Bold), modifier = Modifier.width(38.dp), textAlign = TextAlign.End)
-                if (before != null) Text("+${st[k] - before[k]}", style = mono(11.sp, c.good, FontWeight.Bold), modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
+                Text(k.uppercase(), style = label(13.sp, c.ink), modifier = Modifier.width(40.dp))
+                Bar(if (owned) st[k] / 100f else 0f, androidx.compose.ui.graphics.lerp(c.ink, c.magenta, glow.value), Modifier.weight(1f), height = 6.dp)
+                Text(if (owned) "${st[k]}" else "??", style = label(14.sp, c.ink), modifier = Modifier.width(38.dp), textAlign = TextAlign.End)
+                if (before != null) Text("+${st[k] - before[k]}", style = label(13.sp, c.success), modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-            Text("POWER", style = mono(11.sp, c.dim, FontWeight.Bold, 0.1f), modifier = Modifier.weight(1f))
-            Text(if (owned) "${st.pwr}" else "???", style = display(18.sp, c.hi))
+            Text("POWER", style = caption(11.sp, c.ink), modifier = Modifier.weight(1f))
+            Text(if (owned) "${st.pwr}" else "???", style = headline(19.sp, c.ink))
         }
         if (owned) {
             val cost = Game.upgradeCost(e, lv)
@@ -314,9 +315,9 @@ fun StatsSection(model: GameModel, e: Entry, rec: io.github.krixhnarr.wilddex.co
                         s.shards >= cost -> "Spend credits to power it up"
                         else -> "Need ${cost - s.shards}◆ more · earn ◆ from new animals, orders and events"
                     },
-                    style = mono(11.sp, c.dim), modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    style = body(13.sp, c.ink), modifier = Modifier.weight(1f).padding(end = 8.dp),
                 )
-                if (cost != null) ChunkyButton("Lv ${lv + 1} · $cost◆", kind = if (s.shards >= cost) Btn.Primary else Btn.Neutral, small = true, enabled = s.shards >= cost) {
+                if (cost != null) PillButton("Lv ${lv + 1} · $cost◆", kind = if (s.shards >= cost) Btn.Primary else Btn.Secondary, small = true, enabled = s.shards >= cost) {
                     model.upgradeCard(e.k)?.let { boosted = it }
                 }
             }
@@ -346,7 +347,7 @@ private val HELP = mapOf(
     "about" to ("About WildDex" to listOf(
         "Private" to "Recognition runs on your phone (EfficientNet-Lite4). Photos never leave your device, and scanning works offline.",
         "Dex" to "${Dex.total} cards · ${Dex.sets.size} sectors · ${Dex.typeIds.size} types.",
-        "Credits" to "3D animal art: Microsoft Fluent Emoji (MIT). Recogniser: EfficientNet-Lite4 (Apache 2.0). Fonts: Russo One, JetBrains Mono (OFL).",
+        "Credits" to "3D animal art: Microsoft Fluent Emoji (MIT). Recogniser: EfficientNet-Lite4 (Apache 2.0). Fonts: Inter, JetBrains Mono (OFL).",
     )),
 )
 
@@ -356,15 +357,15 @@ fun Steps(steps: List<Pair<String, String>>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         steps.forEachIndexed { i, (b, t) ->
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.canvas).padding(12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Box(Modifier.size(28.dp).clip(CircleShape).background(c.sun), contentAlignment = Alignment.Center) {
-                    Text("${i + 1}", style = display(14.sp, c.onSun))
+                Box(Modifier.size(28.dp).clip(CircleShape).background(c.lime), contentAlignment = Alignment.Center) {
+                    Text("${i + 1}", style = headline(15.sp, c.blockInk))
                 }
                 Column(Modifier.padding(start = 12.dp)) {
-                    Text(b, style = display(15.sp, c.hi))
-                    Text(t, style = mono(12.sp, c.ink), modifier = Modifier.padding(top = 2.dp))
+                    Text(b, style = headline(16.sp, c.ink))
+                    Text(t, style = body(14.sp, c.ink), modifier = Modifier.padding(top = 2.dp))
                 }
             }
         }
@@ -376,7 +377,7 @@ private fun HelpSheet(model: GameModel, topic: String) {
     val (t, steps) = HELP[topic] ?: return
     SheetHead("Help", t)
     Steps(steps)
-    Actions { ChunkyButton("Got it", kind = Btn.Primary) { model.close() } }
+    Actions { PillButton("Got it", kind = Btn.Primary) { model.close() } }
 }
 
 @Composable
@@ -390,9 +391,9 @@ private fun IntroSheet(model: GameModel) {
         "Battle" to "Build a squad of three in the Arena and beat today's rival. Use type matchups: every affinity beats two others.",
         "Complete" to "${Dex.total} cards · ${Dex.typeIds.size} affinities · ${Dex.sets.size} sectors. Clear daily orders, keep your streak, level up for supply crates, and spend credits on intel and crates.",
     ))
-    Text("All recognition happens on your device. Nothing is uploaded.", style = mono(11.sp, c.dim), modifier = Modifier.padding(top = 12.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+    Text("All recognition happens on your device. Nothing is uploaded.", style = body(13.sp, c.ink), modifier = Modifier.padding(top = 12.dp).fillMaxWidth(), textAlign = TextAlign.Center)
     Actions {
-        ChunkyButton("Start collecting", kind = Btn.Primary) {
+        PillButton("Start collecting", kind = Btn.Primary) {
             model.update { onboarded = true }
             model.close()
         }

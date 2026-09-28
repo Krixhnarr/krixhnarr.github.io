@@ -48,12 +48,15 @@ import io.github.krixhnarr.wilddex.core.Loot
 import io.github.krixhnarr.wilddex.live
 import io.github.krixhnarr.wilddex.ui.Btn
 import io.github.krixhnarr.wilddex.ui.CardView
-import io.github.krixhnarr.wilddex.ui.ChunkyButton
+import io.github.krixhnarr.wilddex.ui.PillButton
 import io.github.krixhnarr.wilddex.ui.Icon
 import io.github.krixhnarr.wilddex.ui.LineIcon
 import io.github.krixhnarr.wilddex.ui.LocalWd
 import io.github.krixhnarr.wilddex.ui.display
-import io.github.krixhnarr.wilddex.ui.mono
+import io.github.krixhnarr.wilddex.ui.body
+import io.github.krixhnarr.wilddex.ui.caption
+import io.github.krixhnarr.wilddex.ui.label
+import io.github.krixhnarr.wilddex.ui.headline
 import io.github.krixhnarr.wilddex.Sheet
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,7 +76,7 @@ fun CrateSheet(model: GameModel, free: Boolean) {
     }
     if (failed) {
         SheetHead("Supply crate", if (free) "No crates left" else "Need ${Loot.CRATE_COST}◆")
-        Actions { ChunkyButton("OK", kind = Btn.Primary) { model.close() } }
+        Actions { PillButton("OK", kind = Btn.Primary) { model.close() } }
         return
     }
     val res = drop ?: return
@@ -89,7 +92,7 @@ fun CrateSheet(model: GameModel, free: Boolean) {
         if (open) Canvas(Modifier.size(260.dp)) {
             val t = burst.value
             for (i in 0 until 14) rotate(i * 360f / 14 + t * 40f) {
-                drawArc(Brush.radialGradient(listOf(tier.copy(alpha = 0.6f * (1 - t * 0.5f)), Color.Transparent), radius = size.minDimension / 2), -5f, 10f, true)
+                drawArc(tier.copy(alpha = 0.5f * (1 - t * 0.5f)), -4f, 8f, true)
             }
             for (i in 0 until 24) {
                 val a = i * 2 * PI / 24
@@ -115,8 +118,8 @@ fun CrateSheet(model: GameModel, free: Boolean) {
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(140.dp).clip(RoundedCornerShape(28.dp)).background(Brush.verticalGradient(listOf(Color(0xFFFFE08A), Color(0xFFE0A100)))))
-                LineIcon(Icon.Crate, Modifier.size(96.dp), Color(0xFF6B4A00), 1.6f)
+                Box(Modifier.size(140.dp).clip(RoundedCornerShape(28.dp)).background(c.cream))
+                LineIcon(Icon.Crate, Modifier.size(96.dp), c.blockInk, 1.4f)
             }
         } else {
             AnimatedVisibility(true, enter = scaleIn(spring(0.45f)) + fadeIn()) {
@@ -125,40 +128,40 @@ fun CrateSheet(model: GameModel, free: Boolean) {
                     val sample = Battle.squad(s).firstOrNull()?.let { Dex.byKey[it] } ?: Dex.entries[0]
                     CardView(sample, s.caught[sample.k] ?: CardRecord(count = 1), Modifier.width(130.dp), frame = res.item.id)
                 } else Column(
-                    Modifier.clip(RoundedCornerShape(18.dp)).background(c.surface).padding(horizontal = 26.dp, vertical = 18.dp),
+                    Modifier.clip(RoundedCornerShape(18.dp)).background(c.canvas).padding(horizontal = 26.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("OPERATOR TITLE", style = mono(10.sp, c.dim, FontWeight.Bold, 0.16f))
-                    Text(res.item.name, style = display(24.sp, c.hi))
+                    Text("OPERATOR TITLE", style = caption(10.sp, c.ink))
+                    Text(res.item.name, style = headline(25.sp, c.ink))
                 }
             }
         }
     }
     if (!open) {
-        Text("TAP ×${3 - hits}", style = mono(12.sp, c.accentDeep, FontWeight.Bold, 0.2f), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text("TAP ×${3 - hits}", style = caption(12.sp, c.ink), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         return
     }
     val t = Loot.TIERS.getValue(res.item.r)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("${t.name} ${res.kind}".uppercase(), style = mono(12.sp, androidx.compose.ui.graphics.lerp(tier, c.ink, 0.25f), FontWeight.Bold, 0.16f))
-        Text(res.item.name, style = display(26.sp, c.hi))
+        Text("${t.name} ${res.kind}".uppercase(), style = caption(12.sp, androidx.compose.ui.graphics.lerp(tier, c.ink, 0.25f)))
+        Text(res.item.name, style = display(32.sp, c.ink))
         Text(
             if (res.dupe) "Already in your locker — refunded +${Loot.DUPE_REFUND}◆." else if (res.kind == "frame") res.item.desc else "Shown on your operator ID.",
-            style = mono(12.sp, c.dim), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
+            style = body(14.sp, c.ink), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
         )
     }
     val s = model.live
     Actions {
-        if (!res.dupe) ChunkyButton("Equip", kind = Btn.Primary) {
+        if (!res.dupe) PillButton("Equip", kind = Btn.Primary) {
             model.update { if (res.kind == "frame") locker().frame = res.item.id else locker().title = res.item.id }
             model.fx.coin()
             model.say("${res.item.name.uppercase()} EQUIPPED")
             model.close()
         }
         val more = s.locker().crates > 0
-        if (more || s.shards >= Loot.CRATE_COST) ChunkyButton(if (more) "Open another" else "Again · ${Loot.CRATE_COST}◆") {
+        if (more || s.shards >= Loot.CRATE_COST) PillButton(if (more) "Open another" else "Again · ${Loot.CRATE_COST}◆") {
             model.open(Sheet.Crate(more))
         }
-        ChunkyButton("Done", kind = if (res.dupe) Btn.Primary else Btn.Neutral) { model.close() }
+        PillButton("Done", kind = if (res.dupe) Btn.Primary else Btn.Secondary) { model.close() }
     }
 }
